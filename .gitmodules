@@ -1,0 +1,6 @@
+[submodule "modules/NEXC"]
+	path = modules/NEXC
+	url = https://github.com/Luqnexa/NEXC.git
+[submodule "modules/Luqnexa-AI"]
+	path = modules/Luqnexa-AI
+	url = https://github.com/Luqnexa/Luqnexa-AI.git

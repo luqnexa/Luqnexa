@@ -1,0 +1,29 @@
+[package]
+name = "nextime-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+nextime-ai.workspace = true
+nextime-parser.workspace = true
+nextime-dict.workspace = true
+nextime-convert.workspace = true
+nextime-ranker.workspace = true
+
+[[bench]]
+name = "conversion"
+path = "../../benchmarks/conversion.rs"
+harness = false
+
+[[bench]]
+name = "session"
+path = "../../benchmarks/session.rs"
+harness = false
+
+[[bench]]
+name = "context"
+path = "../../benchmarks/context.rs"
+harness = false
+

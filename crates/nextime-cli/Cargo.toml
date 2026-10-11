@@ -1,0 +1,21 @@
+[package]
+name = "nextime-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+nextime-core.workspace = true
+nexc-lite.workspace = true
+nexc-max.workspace = true
+
+[[bin]]
+name = "nextime"
+path = "src/main.rs"
+
+
+[[bench]]
+name = "nexc"
+path = "../../benchmarks/nexc.rs"
+harness = false

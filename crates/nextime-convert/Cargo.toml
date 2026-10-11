@@ -1,0 +1,11 @@
+[package]
+name = "nextime-convert"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+nextime-dict.workspace = true
+nextime-ranker.workspace = true
+
