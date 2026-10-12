@@ -5,6 +5,8 @@ if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'build-windows.ps1') }
 $metadata = cargo metadata --manifest-path (Join-Path $PSScriptRoot '../Cargo.toml') --no-deps --format-version 1 | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'cargo metadata failed' }
 $output = Join-Path $metadata.target_directory 'windows-x64'
+python (Join-Path $PSScriptRoot 'test-local-ai-config.py') --dll (Join-Path $output 'nextime_ffi.dll')
+if ($LASTEXITCODE -ne 0) { throw 'Local AI configuration integration failed' }
 $savedTemp = $env:TEMP
 $savedTmp = $env:TMP
 $savedPath = $env:PATH

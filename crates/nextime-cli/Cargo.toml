@@ -14,8 +14,3 @@ nexc-max.workspace = true
 name = "nextime"
 path = "src/main.rs"
 
-
-[[bench]]
-name = "nexc"
-path = "../../benchmarks/nexc.rs"
-harness = false

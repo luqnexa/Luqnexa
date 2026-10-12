@@ -2,6 +2,186 @@
 use nextime_core::{ConvertError, Dictionary, Engine};
 
 #[test]
+fn love_and_ai_remain_available_with_contextual_choices() {
+    let engine = Engine::bundled();
+    let result = engine.convert("あいをつかめ", 24).unwrap();
+    assert_eq!(result.candidates[0].surface, "愛を掴め");
+    assert!(result.candidates.iter().any(|c| c.surface == "AIを掴め"));
+    for (context, expected) in [
+        ("恋人への愛情について話しています。", "愛を確かめたい"),
+        ("人工知能の動作について話しています。", "AIを確かめたい"),
+    ] {
+        let result = engine
+            .convert_with_context("あいをたしかめたい", context, 24)
+            .unwrap();
+        assert_eq!(result.candidates[0].surface, expected, "{context}");
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|c| c.surface == "愛を確かめたい")
+        );
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|c| c.surface == "AIを確かめたい")
+        );
+    }
+    let result = engine.convert("あいをたしかめたい", 24).unwrap();
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == "愛を確かめたい")
+    );
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == "AIを確かめたい")
+    );
+}
+
+#[test]
+fn desire_phrases_keep_their_conjugation_and_only_commit_explicitly() {
+    use nextime_core::{Key, Session};
+    for (input, expected) in [
+        ("あなるセックスしたい", "アナルセックスしたい"),
+        ("anarusekkusushitai", "アナルセックスしたい"),
+        ("べんきょうしたい", "勉強したい"),
+        ("けんさくしたいです", "検索したいです"),
+        ("せっくすしたくない", "セックスしたくない"),
+    ] {
+        for ai in [true, false] {
+            let mut session = Session::new(Engine::bundled(), 24).unwrap();
+            if !ai {
+                session.event(Key::ToggleAi).unwrap();
+            }
+            for ch in input.chars() {
+                assert!(
+                    session
+                        .event(Key::Text(&ch.to_string()))
+                        .unwrap()
+                        .committed
+                        .is_none()
+                );
+            }
+            assert!(session.event(Key::Space).unwrap().committed.is_none());
+            assert_eq!(session.display(), expected, "input={input}, ai={ai}");
+            assert!(
+                session
+                    .candidates()
+                    .iter()
+                    .all(|c| !c.surface.contains("した位")
+                        && !c.surface.contains("した医")
+                        && !c.surface.contains("した胃"))
+            );
+            assert_eq!(
+                session.event(Key::Enter).unwrap().committed.as_deref(),
+                Some(expected)
+            );
+        }
+    }
+}
+
+#[test]
+fn local_ai_configuration_refreshes_after_session_creation() {
+    use nextime_core::{Key, Session};
+    const CHILD: &str = "LUQNEXA_CONFIG_REFRESH_TEST";
+    if std::env::var_os(CHILD).is_some() {
+        let directory =
+            std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join("Luqnexa");
+        let engine = Engine::bundled();
+        assert_eq!(
+            engine.convert("あいをたしかめたい", 8).unwrap().candidates[0].surface,
+            "AIを確かめたい"
+        );
+        let mut session = Session::new(engine, 8).unwrap();
+        assert!(!session.local_ai_enabled());
+        assert_eq!(session.local_ai_status(), "local:config-missing");
+        std::fs::create_dir(&directory).unwrap();
+        let config = directory.join("local-ai.json");
+        let enabled = format!(r#"{{"enabled":true,"token":"{}"}}"#, "0".repeat(64));
+        std::fs::write(&config, &enabled).unwrap();
+        session.event(Key::Text("あいをたしかめたい")).unwrap();
+        assert!(
+            session.local_ai_enabled(),
+            "refresh before conversion UI is shown"
+        );
+        session.event(Key::Space).unwrap();
+        assert!(session.local_ai_enabled());
+        assert_eq!(session.local_ai_status(), "local:on");
+        assert!(
+            session
+                .candidates()
+                .iter()
+                .any(|c| c.surface == "AIを確かめたい")
+        );
+        assert!(
+            session
+                .candidates()
+                .iter()
+                .any(|c| c.surface == "愛を確かめたい")
+        );
+        session.event(Key::Cancel).unwrap();
+        std::fs::write(&config, r#"{"enabled":false}"#).unwrap();
+        session.event(Key::Text("あいをたしかめたい")).unwrap();
+        session.event(Key::Space).unwrap();
+        assert!(!session.local_ai_enabled());
+        assert_eq!(session.local_ai_status(), "local:config-disabled");
+        session.event(Key::Cancel).unwrap();
+        std::fs::write(&config, "broken JSON").unwrap();
+        session.event(Key::Text("a")).unwrap();
+        assert_eq!(session.local_ai_status(), "local:config-invalid");
+        session.event(Key::Cancel).unwrap();
+        std::fs::write(&config, r#"{"enabled":true,"token":"short"}"#).unwrap();
+        session.event(Key::Text("a")).unwrap();
+        assert_eq!(session.local_ai_status(), "local:token-invalid");
+        session.event(Key::Cancel).unwrap();
+        std::fs::write(&config, &enabled).unwrap();
+        session.event(Key::ToggleAi).unwrap();
+        session.event(Key::Text("あいをたしかめたい")).unwrap();
+        session.event(Key::Space).unwrap();
+        assert!(
+            !session.local_ai_enabled(),
+            "user's F9 choice must remain disabled"
+        );
+        assert_eq!(session.local_ai_status(), "local:off");
+        std::fs::remove_file(config).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+        return;
+    }
+    // Separate process: never mutate this process's real user configuration.
+    let directory = std::env::temp_dir().join(format!(
+        "luqnexa-config-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "local_ai_configuration_refreshes_after_session_creation",
+        ])
+        .env(CHILD, "1")
+        .env("LUQNEXA_AI_BACKEND", "qwen")
+        .env("LOCALAPPDATA", &directory)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
 #[ignore = "Requires a running, explicitly configured local Qwen backend"]
 fn real_local_llm_changes_contextual_choice_without_commit_or_stale_selection() {
     use nextime_core::{Key, Session};

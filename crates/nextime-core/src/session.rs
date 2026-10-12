@@ -68,6 +68,7 @@ pub struct Session {
     text_learning: bool,
     text_model: nextime_ai::Model,
     local_ai: Option<nextime_ai::LocalLlm>,
+    local_ai_error: Option<nextime_ai::LocalConfigError>,
 }
 
 impl Session {
@@ -75,6 +76,8 @@ impl Session {
         if !(1..=MAX_CANDIDATES).contains(&limit) {
             return Err(ConvertError::InvalidLimit.into());
         }
+        let local_ai = Self::optional_llm();
+        let local_ai_error = local_ai.as_ref().err().copied();
         Ok(Self {
             engine,
             limit,
@@ -90,7 +93,8 @@ impl Session {
             learn_selection: false,
             text_learning: true,
             text_model: nextime_ai::Model::default(),
-            local_ai: nextime_ai::LocalLlm::configured(),
+            local_ai: local_ai.ok(),
+            local_ai_error,
         })
     }
     pub fn raw(&self) -> &str {
@@ -165,6 +169,9 @@ impl Session {
         }
         if key == Key::ToggleAi {
             self.ai = !self.ai;
+            if self.ai {
+                self.refresh_local_ai();
+            }
             self.context.clear();
             self.refresh();
             return Ok(Outcome {
@@ -204,6 +211,9 @@ impl Session {
             if self.raw.len().saturating_add(text.len()) > MAX_INPUT_CHARS * 4 {
                 return Err(ConvertError::InputTooLong.into());
             }
+            if self.ai && self.raw.is_empty() {
+                self.refresh_local_ai();
+            }
             let next = format!("{}{text}", self.raw);
             let preedit = if self.english || self.engine.is_english_word(&next) {
                 next.clone()
@@ -231,6 +241,12 @@ impl Session {
                 self.refresh();
             }
             Key::Convert if !self.selecting => {
+                // The local helper can start or rotate its authentication token
+                // after this input session was created. Refresh on conversion,
+                // never on every typed character or timer tick.
+                if self.ai {
+                    self.refresh_local_ai();
+                }
                 self.candidates = if self.english {
                     vec![Candidate {
                         surface: self.raw.clone(),
@@ -353,6 +369,33 @@ impl Session {
     }
     pub fn local_ai_enabled(&self) -> bool {
         self.ai && self.local_ai.is_some()
+    }
+    pub fn local_ai_status(&self) -> &'static str {
+        if !self.ai {
+            "local:off"
+        } else if std::env::var("LUQNEXA_AI_BACKEND").as_deref() != Ok("qwen") {
+            "local:original"
+        } else if self.local_ai_pending() {
+            "local:pending"
+        } else if self.local_ai.is_some() {
+            "local:on"
+        } else {
+            self.local_ai_error
+                .map_or("local:off", nextime_ai::LocalConfigError::status)
+        }
+    }
+    fn refresh_local_ai(&mut self) {
+        let configured = Self::optional_llm();
+        self.local_ai_error = configured.as_ref().err().copied();
+        self.local_ai = configured.ok();
+    }
+    fn optional_llm() -> Result<nextime_ai::LocalLlm, nextime_ai::LocalConfigError> {
+        // Native inference has no settings, helper, sockets or credentials.
+        if std::env::var("LUQNEXA_AI_BACKEND").as_deref() == Ok("qwen") {
+            nextime_ai::LocalLlm::try_configured()
+        } else {
+            Err(nextime_ai::LocalConfigError::Disabled)
+        }
     }
     pub fn learned_entries(&self) -> usize {
         self.personal.entry_count()

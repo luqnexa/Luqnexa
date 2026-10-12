@@ -9,6 +9,24 @@ function Run-Session([string[]]$commands) {
     if ($LASTEXITCODE -ne 0) { throw 'AI session failed' }
     $output -join "`n"
 }
+foreach ($case in @(
+    @('あなるセックスしたい', 'アナルセックスしたい'),
+    @('anarusekkusushitai', 'アナルセックスしたい'),
+    @('べんきょうしたい', '勉強したい'),
+    @('けんさくしたいです', '検索したいです'),
+    @('せっくすしたくない', 'セックスしたくない')
+)) {
+    foreach ($ai in @($true, $false)) {
+        $commands=@()
+        if (-not $ai) { $commands += 'ai' }
+        # Session CLI uses 'ai' for the explicit F9 equivalent.
+        foreach ($character in $case[0].ToCharArray()) { $commands += "text $character" }
+        $commands += @('space', 'quit')
+        $result=Run-Session $commands
+        if (-not $result.Contains("preedit: $($case[1])")) { throw "Desire conjugation failed: $($case[0])" }
+        if ($result -match 'した(位|医|胃)') { throw "Desire conjugation produced a split noun: $($case[0])" }
+    }
+}
 foreach ($editorInput in @('vscode', 'VSCode', 'vscodede', 'vscodeを')) {
     $editor = Run-Session @("text $editorInput", 'space', 'quit')
     $editorExpected = if ($editorInput -ceq 'vscodede') { 'vscodeで' } else { $editorInput }
@@ -37,7 +55,10 @@ foreach ($aiSwitch in @($false, $true)) {
         @('あいをつかい', 'AIを使い'), @('aiwotsukai', 'AIを使い'),
         @('あいをつかって', 'AIを使って'), @('あいをつかいたい', 'AIを使いたい'),
         @('あいをつかいます', 'AIを使います'), @('あいを使い', 'AIを使い'),
-        @('あいをりよう', 'AIを利用')
+        @('あいをりよう', 'AIを利用'),
+        @('あいをたしかめたい', 'AIを確かめたい'),
+        @('aiwotashikametai', 'AIを確かめたい'),
+        @('あいをかくにんしたい', 'AIを確認したい')
     )) {
         $commands = @()
         if ($aiSwitch) { $commands += 'ai' }
@@ -45,7 +66,12 @@ foreach ($aiSwitch in @($false, $true)) {
         $commands += @('space', 'quit')
         $result = Run-Session $commands
         $lastPreedit = @($result -split "`n" | Where-Object { $_.StartsWith('preedit:') })[-1]
-        if ($lastPreedit -cne "preedit: $($case[1])") { throw "Proper noun regression: $($case[0]), AI disabled=$aiSwitch, actual=$lastPreedit" }
+        if ($case[0] -in @('あいをたしかめたい','aiwotashikametai')) {
+            if ($lastPreedit -cnotin @('preedit: AIを確かめたい','preedit: 愛を確かめたい') -or
+                -not $result.Contains('AIを確かめたい') -or -not $result.Contains('愛を確かめたい')) {
+                throw "Ambiguous love/AI choices lost: $($case[0])"
+            }
+        } elseif ($lastPreedit -cne "preedit: $($case[1])") { throw "Proper noun regression: $($case[0]), AI disabled=$aiSwitch, actual=$lastPreedit" }
         if ($result.Contains('commit:')) { throw 'Proper noun correction auto-committed text' }
     }
 }
@@ -54,6 +80,8 @@ foreach ($loveInput in @('あいをつたえる', 'あいする', 'あいをこ�
     $love = Run-Session @("text $loveInput", 'space', 'quit')
     if ($love -match '(?m)^\s*\d+\. .*AI') { throw "Love expression was changed to AI: $loveInput" }
 }
+$love=Run-Session @('text あいをつかめ', 'space', 'quit')
+if (($love -notmatch 'preedit: 愛を(掴め|つかめ)') -or -not $love.Contains('AIを掴め')) { throw 'Grasp-love collocation or alternative lost' }
 foreach ($sentence in @('あいをつかって文章を書く', 'あいをつかいたいです', 'あいをつかいます。', 'あいをりようする')) {
     $result = Run-Session @("text $sentence", 'space', 'quit')
     $lastPreedit = @($result -split "`n" | Where-Object { $_.StartsWith('preedit:') })[-1]

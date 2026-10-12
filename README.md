@@ -37,3 +37,8 @@ cargo run --release -p nextime-cli -- hashi
 ## ライセンス
 
 本体ソースはGNU AGPL-3.0-only（[LICENSE](LICENSE)）。対象となる改造版の配布・ネットワーク利用ではAGPLの条件に従って対応ソースを提供してください。第三者辞書・モデル・ライブラリのライセンス表示を保持し、すべてをAGPLへ変更しません。
+
+
+## 2026-10-13 更新
+
+候補変換・混在入力の回帰テストを更新しました。辞書配信と暗号化Memoryの試作は [Luqnexa-Server](https://github.com/Luqnexa/Luqnexa-Server) を参照してください。Windowsは試作段階で、今回のソース公開は稼働中IMEの更新ではありません。

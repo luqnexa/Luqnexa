@@ -112,6 +112,34 @@ pub fn convert(
         rank_paths(&mut beams[start], beam_limit);
         let prefixes = std::mem::take(&mut beams[start]);
         if start > 0 {
+            for particle in ["が", "は"] {
+                let tail = &reading[boundaries[start]..];
+                if let Some(predicate_tail) = tail.strip_prefix(particle) {
+                    for predicate in grammar::EVALUATIONS {
+                        if !predicate_tail.starts_with(predicate) {
+                            continue;
+                        }
+                        let entries = dictionary
+                            .lookup(predicate, MAX_CANDIDATES)
+                            .map_err(ConvertError::Dictionary)?;
+                        for entry in entries.iter().filter(|e| {
+                            grammar::is_predicate(&e.part_of_speech)
+                                && grammar::can_end(&e.part_of_speech)
+                        }) {
+                            let end = start + 1 + predicate.chars().count();
+                            extend(
+                                &mut beams[end],
+                                &prefixes,
+                                &format!("{particle}{}", entry.surface),
+                                word_score(entry.frequency) + 1024,
+                                "predicate-phrase",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if start > 0 {
             if let Some(connective) = grammar::CONNECTIVES.iter().find(|text| {
                 reading[boundaries[start]..].starts_with(**text)
                     && prefixes
@@ -153,17 +181,28 @@ pub fn convert(
                 );
             }
         }
-        for suffix in grammar::SUFFIXES {
-            if reading[boundaries[start]..].starts_with(suffix) {
-                let end = start + suffix.chars().count();
-                extend(
-                    &mut beams[end],
-                    &prefixes,
-                    suffix,
-                    word_score(9000),
-                    "suru-suffix",
-                );
-            }
+        // Keep a recognized suru conjugation intact. Shorter edges such as
+        // した + 位 must not compete with したい after a sahen noun.
+        if let Some(suffix) = grammar::SUFFIXES
+            .iter()
+            .filter(|suffix| reading[boundaries[start]..].starts_with(**suffix))
+            .max_by_key(|suffix| suffix.len())
+            .filter(|_| {
+                start > 0
+                    && prefixes
+                        .iter()
+                        .any(|p| grammar::can_follow(&p.pos, "suru-suffix"))
+            })
+        {
+            let end = start + suffix.chars().count();
+            extend(
+                &mut beams[end],
+                &prefixes,
+                suffix,
+                word_score(9000),
+                "suru-suffix",
+            );
+            continue;
         }
         for end in start + 1..=(start + dictionary.max_reading_chars()).min(count) {
             let slice = &reading[boundaries[start]..boundaries[end]];
@@ -267,7 +306,9 @@ fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, 
         target.push(Path {
             candidate: Candidate {
                 surface: combined,
-                score: prefix.candidate.score + score,
+                score: prefix.candidate.score
+                    + score
+                    + grammar::transition_score(&prefix.candidate.surface, surface),
                 segments: prefix.candidate.segments + 1,
             },
             pos: pos.into(),
@@ -278,6 +319,75 @@ fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn desire_conjugations_do_not_split_into_homophone_nouns() {
+        let dict = Dictionary::from_tsv(
+            "べんきょう\t勉強\tsahen\t6000\nけんさく\t検索\tmozc:1841:1841:100\t6000\nした\tした\tphrase\t9000\nしたい\t死体\tnoun\t9000\nい\t位\tnoun\t10000\nい\t医\tnoun\t10000\nい\t胃\tnoun\t10000"
+        ).unwrap();
+        for noun in ["べんきょう", "けんさく"] {
+            let surface = if noun == "べんきょう" {
+                "勉強"
+            } else {
+                "検索"
+            };
+            for suffix in [
+                "したい",
+                "したいです",
+                "したかった",
+                "したくない",
+                "したくないです",
+                "したくなかった",
+                "したくて",
+            ] {
+                let reading = format!("{noun}{suffix}");
+                let candidates = convert(&dict, &reading, 24).unwrap();
+                assert_eq!(candidates[0].surface, format!("{surface}{suffix}"));
+                assert!(
+                    candidates
+                        .iter()
+                        .all(|c| c.surface == format!("{surface}{suffix}") || c.surface == reading),
+                    "{candidates:?}"
+                );
+            }
+        }
+        assert_eq!(convert(&dict, "したい", 8).unwrap()[0].surface, "死体");
+        assert!(
+            convert(&dict, "い", 8)
+                .unwrap()
+                .iter()
+                .any(|c| c.surface == "胃")
+        );
+    }
+    #[test]
+    fn evaluation_particles_and_sentence_endings_remain_grammatical() {
+        let dict = Dictionary::from_tsv(
+            "せいど\t精度\tnoun\t6500\nおと\t音\tnoun\t6000\nがいい\t害意\tnoun\t9000\nがわるい\t側類\tnoun\t9000\nいい\tいい\tadjective\t5000\nいい\t良い\tadjective\t4900\nわるい\t悪い\tadjective\t5000\nよ\tよ\tparticle\t4000\nよ\t余\tnoun\t9000\nよ\t夜\tnoun\t9000\nね\tね\tparticle\t4000\nね\t根\tnoun\t9000"
+        ).unwrap();
+        for (reading, expected) in [
+            ("せいどがいい", "精度がいい"),
+            ("せいどがいいよ", "精度がいいよ"),
+            ("おとがいいね", "音がいいね"),
+            ("せいどがわるい", "精度が悪い"),
+            ("せいどはわるい", "精度は悪い"),
+        ] {
+            assert_eq!(convert(&dict, reading, 8).unwrap()[0].surface, expected);
+        }
+        assert_eq!(convert(&dict, "がいい", 8).unwrap()[0].surface, "害意");
+        assert_eq!(convert(&dict, "よ", 8).unwrap()[0].surface, "余");
+    }
+
+    #[test]
+    fn demonstrative_context_prefers_feeling_without_removing_kanji() {
+        let dict = Dictionary::from_tsv(
+            "こんな\tこんな\tadnominal\t5000\nそんな\tそんな\tadnominal\t5000\nあんな\tあんな\tadnominal\t5000\nどんな\tどんな\tadnominal\t5000\nかんじ\t漢字\tnoun\t8500\nかんじ\t感じ\tnoun\t8000"
+        ).unwrap();
+        for prefix in ["こんな", "そんな", "あんな", "どんな"] {
+            let result = convert(&dict, &format!("{prefix}かんじ"), 8).unwrap();
+            assert_eq!(result[0].surface, format!("{prefix}感じ"));
+            assert!(result.iter().any(|c| c.surface == format!("{prefix}漢字")));
+        }
+        assert_eq!(convert(&dict, "かんじ", 8).unwrap()[0].surface, "漢字");
+    }
     #[test]
     fn noun_connectives_do_not_turn_into_night_or_nonfinite_verbs() {
         let dictionary = Dictionary::from_tsv("あい\t愛\tnoun\t6000\nあい\t会い\tmozc:829:829:2002\t9000\nに\tに\tparticle\t8000\nよる\t夜\tnoun\t9000\n").unwrap();

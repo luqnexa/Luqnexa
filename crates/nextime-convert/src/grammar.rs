@@ -64,6 +64,13 @@ pub const SUFFIXES: &[&str] = &[
     "して",
     "する",
     "した",
+    "したい",
+    "したいです",
+    "したかった",
+    "したくない",
+    "したくないです",
+    "したくなかった",
+    "したくて",
     "します",
     "しました",
     "しています",
@@ -95,9 +102,41 @@ pub fn is_particle(pos: &str) -> bool {
 pub fn is_particle_reading(reading: &str) -> bool {
     matches!(
         reading,
-        "が" | "を" | "は" | "に" | "で" | "と" | "も" | "の" | "へ" | "や" | "て"
+        "が" | "を"
+            | "は"
+            | "に"
+            | "で"
+            | "と"
+            | "も"
+            | "の"
+            | "へ"
+            | "や"
+            | "て"
+            | "よ"
+            | "ね"
+            | "ぞ"
     )
 }
+
+/// Small, explicit local preferences. Ambiguous alternatives remain available.
+pub fn transition_score(previous_surface: &str, surface: &str) -> i64 {
+    if previous_surface.ends_with("愛を") && matches!(surface, "掴め" | "つかめ") {
+        return 2048;
+    }
+    if surface == "感じ"
+        && ["こんな", "そんな", "あんな", "どんな"]
+            .iter()
+            .any(|word| previous_surface.ends_with(word))
+    {
+        512
+    } else {
+        0
+    }
+}
+
+/// These productive evaluation predicates can follow が/は without converting
+/// the particle into the first character of a noun such as 害意 or 側類.
+pub const EVALUATIONS: &[&str] = &["いい", "よい", "わるい"];
 
 pub fn is_predicate(pos: &str) -> bool {
     let pos = description(pos, false);

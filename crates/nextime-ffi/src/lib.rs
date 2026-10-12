@@ -262,15 +262,7 @@ pub unsafe extern "C" fn nextime_session_text(
                     .surface
             }
             5 => &state.committed,
-            9 => {
-                if state.session.local_ai_pending() {
-                    "local:pending"
-                } else if state.session.local_ai_enabled() {
-                    "local:on"
-                } else {
-                    "local:off"
-                }
-            }
+            9 => state.session.local_ai_status(),
             7 => {
                 if state.session.ai_enabled() {
                     "AI:on"

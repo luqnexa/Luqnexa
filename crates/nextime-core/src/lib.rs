@@ -29,6 +29,52 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Conversion-time alternatives only; live preedit and literal input stay intact.
+    fn corrected_reading(&self, input: &str) -> String {
+        let words: Vec<_> = input.split(' ').collect();
+        let input = if words.len() > 1
+            && words.iter().any(|s| !self.is_english_word(s))
+            && words
+                .iter()
+                .all(|s| s.bytes().all(|b| b.is_ascii_alphabetic()))
+        {
+            words.concat()
+        } else {
+            input.to_owned()
+        };
+        let aliases: Vec<_> = include_str!("../../../models/input-aliases.tsv")
+            .lines()
+            .filter(|s| !s.starts_with('#'))
+            .filter_map(|s| s.split_once('\t'))
+            .collect();
+        let mut output = String::new();
+        let mut rest = input.as_str();
+        let mut prefix = String::new();
+        while !rest.is_empty() {
+            let alias = aliases.iter().find(|(from, _)| {
+                rest.strip_prefix(from).is_some_and(|tail| {
+                    ["de", "ni", "wo", "to", "no", "tte"]
+                        .iter()
+                        .any(|p| tail.starts_with(p))
+                        && !nextime_parser::to_hiragana(&prefix)
+                            .chars()
+                            .any(|c| c.is_ascii_alphabetic())
+                })
+            });
+            if let Some((from, to)) = alias {
+                output.push_str(&self.normalize_input(&prefix, false));
+                prefix.clear();
+                output.push_str(to);
+                rest = &rest[from.len()..];
+            } else {
+                let c = rest.chars().next().unwrap();
+                prefix.push(c);
+                rest = &rest[c.len_utf8()..];
+            }
+        }
+        output.push_str(&self.normalize_input(&prefix, false));
+        output
+    }
     fn common_english(input: &str) -> bool {
         let explicit_acronym = input.len() >= 2 && input.chars().all(|c| c.is_ascii_uppercase());
         static COMMON: std::sync::OnceLock<Dictionary> = std::sync::OnceLock::new();
@@ -272,7 +318,104 @@ impl Engine {
         if !(1..=MAX_CANDIDATES).contains(&limit) {
             return Err(ConvertError::InvalidLimit);
         }
-        let mut result = self.convert(input, MAX_CANDIDATES)?;
+        if input.len() > MAX_INPUT_CHARS * 4 {
+            return Err(ConvertError::InputTooLong);
+        }
+        let original = self.normalize_input(input, false);
+        if original.chars().count() > MAX_INPUT_CHARS {
+            return Err(ConvertError::InputTooLong);
+        }
+        let corrected = self.corrected_reading(input);
+        let reviewed = include_str!("../../../models/input-corrections.tsv")
+            .lines()
+            .filter_map(|s| s.split_once('\t'))
+            .any(|(from, _)| corrected == from);
+        let exact_correction = corrected != original
+            && !self
+                .dictionary
+                .lookup(&corrected, MAX_CANDIDATES)
+                .map_err(ConvertError::Dictionary)?
+                .is_empty();
+        // A verified whole-word correction need not search every segmentation
+        // of the broken input. Preserve its literal and exact original entries.
+        let fast = reviewed || exact_correction;
+        let mut result = if fast {
+            let mut candidates = if exact_correction {
+                nextime_convert::convert(self.dictionary.as_ref(), &corrected, MAX_CANDIDATES)?
+            } else {
+                Vec::new()
+            };
+            for entry in self
+                .dictionary
+                .lookup(&original, MAX_CANDIDATES)
+                .map_err(ConvertError::Dictionary)?
+                .iter()
+            {
+                candidates.push(Candidate {
+                    surface: entry.surface.clone(),
+                    score: nextime_ranker::word_score(entry.frequency),
+                    segments: 1,
+                });
+            }
+            candidates.push(Candidate {
+                surface: original.clone(),
+                score: -100_000,
+                segments: 1,
+            });
+            Conversion {
+                reading: original,
+                candidates,
+            }
+        } else {
+            self.convert(input, MAX_CANDIDATES)?
+        };
+        if !fast && corrected != result.reading {
+            for mut candidate in
+                nextime_convert::convert(self.dictionary.as_ref(), &corrected, MAX_CANDIDATES)?
+            {
+                candidate.score -= 256;
+                if !result
+                    .candidates
+                    .iter()
+                    .any(|c| c.surface == candidate.surface)
+                {
+                    result.candidates.push(candidate);
+                }
+            }
+        }
+        for (from, to) in include_str!("../../../models/input-corrections.tsv")
+            .lines()
+            .filter(|s| !s.starts_with('#'))
+            .filter_map(|s| s.split_once('\t'))
+        {
+            if corrected == from {
+                result.candidates.push(Candidate {
+                    surface: to.into(),
+                    score: 8192,
+                    segments: 1,
+                });
+            }
+        }
+        if !self.is_english_word(input) && result.reading.chars().any(|c| c.is_ascii_lowercase()) {
+            for corrected in nextime_ai::typo_readings(input) {
+                for entry in self
+                    .dictionary
+                    .lookup(&corrected, 4)
+                    .map_err(ConvertError::Dictionary)?
+                    .iter()
+                {
+                    if matches!(entry.part_of_speech.as_str(), "english" | "slang-en")
+                        && !result.candidates.iter().any(|c| c.surface == entry.surface)
+                    {
+                        result.candidates.push(Candidate {
+                            surface: entry.surface.clone(),
+                            score: nextime_ranker::word_score(entry.frequency) - 512,
+                            segments: 1,
+                        });
+                    }
+                }
+            }
+        }
         let literal = result
             .candidates
             .iter()
