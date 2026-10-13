@@ -1,0 +1,12 @@
+{"input":"pythob","context":"プログラミング言語の名前","good":"Python","split":"test","error":"adjacent_key","scope":"standalone"}
+{"input":"ruts","context":"プログラミング言語の名前","good":"Rust","split":"test","error":"transposition","scope":"standalone"}
+{"input":"githhub","context":"ソースを公開するサービスの名前","good":"GitHub","split":"test","error":"extra_key","scope":"standalone"}
+{"input":"windwos","context":"パソコンのOSの名前","good":"Windows","split":"test","error":"transposition","scope":"standalone"}
+{"input":"dockrr","context":"コンテナを起動するソフトの名前","good":"Docker","split":"test","error":"adjacent_key","scope":"standalone"}
+{"input":"jr;;p","context":"英語で挨拶する","good":"hello","split":"test","error":"whole_keyboard_shift","scope":"standalone"}
+{"input":"pythobdekeisansuru","context":"プログラミング言語で計算する","good":"Pythonで計算する","split":"test","error":"adjacent_key","scope":"mixed_sentence"}
+{"input":"rutsdehairetsuwotsukuru","context":"プログラミング言語で配列を作る","good":"Rustで配列を作る","split":"test","error":"transposition","scope":"mixed_sentence"}
+{"input":"githhubnisoosuwooku","context":"コードを共有サイトに保存する","good":"GitHubにソースを置く","split":"test","error":"extra_key","scope":"mixed_sentence"}
+{"input":"windwosnosetteiwokaeru","context":"パソコンのOSの設定を変更する","good":"Windowsの設定を変える","split":"test","error":"transposition","scope":"mixed_sentence"}
+{"input":"dockrrdekankyouwojunbisuru","context":"コンテナ技術で開発環境を準備する","good":"Dockerで環境を準備する","split":"test","error":"adjacent_key","scope":"mixed_sentence"}
+{"input":"pytondebunshouwobunsekisuru","context":"プログラミング言語で文章を分析する","good":"Pythonで文章を分析する","split":"test","error":"missing_key","scope":"mixed_sentence"}

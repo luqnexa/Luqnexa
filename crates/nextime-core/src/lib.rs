@@ -46,10 +46,18 @@ impl Engine {
             return Err(ConvertError::InvalidLimit);
         }
         // Keep the whole bounded candidate pool until the learned reranking.
-        let mut result = self.convert(input, MAX_CANDIDATES)?;
+        let mut result = self.conversion_candidates(input, MAX_CANDIDATES)?;
+        let literal = result
+            .candidates
+            .iter()
+            .find(|c| c.surface == result.reading)
+            .cloned();
+        nextime_ranker::rank(&mut result.candidates, MAX_CANDIDATES);
+        Self::restore_literal(&mut result, literal.clone(), MAX_CANDIDATES);
         model
             .rerank(input, context, &mut result.candidates, limit)
             .map_err(|_| ConvertError::InvalidLimit)?;
+        Self::restore_literal(&mut result, literal, limit);
         Ok(result)
     }
 
@@ -380,6 +388,35 @@ impl Engine {
         context: &str,
         limit: usize,
     ) -> Result<Conversion, ConvertError> {
+        if !(1..=MAX_CANDIDATES).contains(&limit) {
+            return Err(ConvertError::InvalidLimit);
+        }
+        let mut result = self.conversion_candidates(input, MAX_CANDIDATES)?;
+        let literal = result
+            .candidates
+            .iter()
+            .find(|c| c.surface == result.reading)
+            .cloned();
+        nextime_ai::Model::bundled().rerank(context, &mut result.candidates, limit);
+        Self::restore_literal(&mut result, literal, limit);
+        Ok(result)
+    }
+
+    fn restore_literal(result: &mut Conversion, literal: Option<Candidate>, limit: usize) {
+        if let Some(literal) = literal.filter(|_| limit > 1) {
+            if !result
+                .candidates
+                .iter()
+                .any(|c| c.surface == literal.surface)
+            {
+                result.candidates.truncate(limit - 1);
+                result.candidates.push(literal);
+            }
+        }
+    }
+
+    // Shared lexical generation only. Does not apply old model weights or start a backend.
+    fn conversion_candidates(&self, input: &str, limit: usize) -> Result<Conversion, ConvertError> {
         // Request a wider set before contextual ranking; preserve the literal
         // fallback even when it would otherwise be truncated.
         if !(1..=MAX_CANDIDATES).contains(&limit) {
@@ -481,22 +518,6 @@ impl Engine {
                         });
                     }
                 }
-            }
-        }
-        let literal = result
-            .candidates
-            .iter()
-            .find(|c| c.surface == result.reading)
-            .cloned();
-        nextime_ai::Model::bundled().rerank(context, &mut result.candidates, limit);
-        if let Some(literal) = literal.filter(|_| limit > 1) {
-            if !result
-                .candidates
-                .iter()
-                .any(|c| c.surface == literal.surface)
-            {
-                result.candidates.truncate(limit - 1);
-                result.candidates.push(literal);
             }
         }
         Ok(result)

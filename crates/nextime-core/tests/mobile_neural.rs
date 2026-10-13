@@ -38,3 +38,25 @@ fn explicit_neural_path_retains_the_real_dictionary_candidate_pool() {
         1
     );
 }
+
+#[test]
+fn neural_path_can_rank_dictionary_verified_typo_candidates_without_an_llm() {
+    let model =
+        NeuralRanker::from_bytes(&luqnexa_ml::Trainer::new(3).quantize().to_bytes()).unwrap();
+    let result = Engine::bundled()
+        .convert_with_neural("pythpn", "コードを書く", &model, 32)
+        .unwrap();
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface.eq_ignore_ascii_case("Python"))
+    );
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == result.reading)
+    );
+    assert!(result.candidates.len() <= 32);
+}
