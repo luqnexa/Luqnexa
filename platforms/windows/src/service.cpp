@@ -36,25 +36,6 @@ class Service final : public ITfTextInputProcessor, public ITfKeyEventSink, publ
     bool key_sink_=false;
     bool composing_=false,candidates_=false;
     bool cancel_pending_=false;
-    HWND poll_window_=nullptr;
-    static LRESULT CALLBACK poll_proc(HWND hwnd,UINT message,WPARAM wparam,LPARAM lparam) {
-        auto service=reinterpret_cast<Service*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
-        if(message==WM_NCCREATE) {
-            service=static_cast<Service*>(reinterpret_cast<CREATESTRUCTW*>(lparam)->lpCreateParams);
-            SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(service));
-        }
-        if(message==WM_TIMER && service) {
-            try {
-                uint32_t selected=UINT32_MAX;
-                if(service->manager_ && service->context_ && service->composing_ && !service->cancel_pending_
-                    && service->rust_.candidates(&selected)>1 && selected==0
-                    && service->rust_.text(NEXTIME_LOCAL_AI_MODE)==L"local:pending")
-                    service->request(service->context_.Get(),{NEXTIME_POLL_AI,{}},nullptr,TF_ES_ASYNCDONTCARE);
-            } catch(...) { }
-            return 0;
-        }
-        return DefWindowProcW(hwnd,message,wparam,lparam);
-    }
     HRESULT request(ITfContext* context,KeyAction action,BOOL* eaten=nullptr,DWORD mode=TF_ES_SYNC) {
         if(eaten) *eaten=FALSE;
         if(!context) return E_INVALIDARG;
@@ -95,7 +76,7 @@ class Service final : public ITfTextInputProcessor, public ITfKeyEventSink, publ
     }
 public:
     Service() { ++live_objects; }
-    ~Service() { if(poll_window_) { DestroyWindow(poll_window_); UnregisterClassW(L"LuqnexaLocalAiPoll",module_handle); } --live_objects; }
+    ~Service() { --live_objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** out) override {
         if(!out) return E_POINTER; *out=nullptr;
         if(iid==IID_IUnknown || iid==IID_ITfTextInputProcessor) *out=static_cast<ITfTextInputProcessor*>(this);
@@ -118,16 +99,11 @@ public:
             if(SUCCEEDED(hr)) hr=keys->AdviseKeyEventSink(client_,static_cast<ITfKeyEventSink*>(this),TRUE);
             if(FAILED(hr)) { Deactivate(); return hr; }
             key_sink_=true;
-            WNDCLASSW poll_class{}; poll_class.lpfnWndProc=poll_proc; poll_class.hInstance=module_handle;
-            poll_class.lpszClassName=L"LuqnexaLocalAiPoll"; RegisterClassW(&poll_class);
-            poll_window_=CreateWindowExW(0,poll_class.lpszClassName,L"",0,0,0,0,0,HWND_MESSAGE,nullptr,module_handle,this);
-            if(poll_window_) SetTimer(poll_window_,1,100,nullptr);
             return S_OK;
         } catch(...) { Deactivate(); return E_FAIL; }
     }
     HRESULT STDMETHODCALLTYPE Deactivate() override {
         try {
-            if(poll_window_) { DestroyWindow(poll_window_); poll_window_=nullptr; UnregisterClassW(L"LuqnexaLocalAiPoll",module_handle); }
             cancel_on_focus_loss();
             if(manager_) {
                 ComPtr<ITfKeystrokeMgr> keys; if(key_sink_ && SUCCEEDED(manager_.As(&keys))) keys->UnadviseKeyEventSink(client_);

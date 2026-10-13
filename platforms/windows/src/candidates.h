@@ -43,7 +43,7 @@ public:
         uint32_t start=selected==UINT32_MAX ? 0 : (selected/8)*8;
         rows_.push_back(session.text(NEXTIME_MODE)+L" / F6:全角 Shift+F6:半角 / F10:英字 / F12:日英");
         for(uint32_t i=start;i<std::min(count,start+8);++i) rows_.push_back(std::to_wstring(i+1)+L". "+session.text(NEXTIME_CANDIDATE,i));
-        selected_=selected==UINT32_MAX ? UINT32_MAX : selected-start+3;
+        selected_=selected==UINT32_MAX ? UINT32_MAX : selected-start+1;
         if(!window_) {
             WNDCLASSW klass{}; klass.lpfnWndProc=procedure; klass.hInstance=module;
             class_name_=L"Luqnexa.Candidates."+std::to_wstring(reinterpret_cast<uintptr_t>(this));
