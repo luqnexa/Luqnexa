@@ -42,11 +42,14 @@ jobs:
           cd build
           zip -qr LuqnexaProbe-unsigned.ipa Payload
           shasum -a 256 LuqnexaProbe-unsigned.ipa > SHA256SUMS.txt
+      - name: Verify IPA architecture and model integrity
+        run: python3 scripts/verify-ios-probe.py platforms/ios/build/LuqnexaProbe-unsigned.ipa > platforms/ios/build/verification.json
       - uses: actions/upload-artifact@v4
         with:
           name: LuqnexaProbe-unsigned-iphone
           path: |
             platforms/ios/build/LuqnexaProbe-unsigned.ipa
             platforms/ios/build/SHA256SUMS.txt
+            platforms/ios/build/verification.json
             platforms/ios/Resources/training-report.json
           if-no-files-found: error

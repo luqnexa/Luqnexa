@@ -37,6 +37,8 @@ WindowsのCプログラムから学習済みモデルのロード・日本語候
 
 スマホ用ライブラリのリンクにはAndroid NDK、iOSではXcode SDKが必要です。本環境でのcross checkはSDKを使った最終リンクや実機実行を証明しません。AndroidのInputMethodServiceとiOSのCustom KeyboardへのUI接続、正規のホスト連携、実機のp95・メモリ・電力は未完了です。モデルだけの常駐サイズをキーボード拡張全体のメモリ量として扱わないでください。
 
+iPhone用の実験アプリとmacOSでのIPA生成は `platforms/ios` と `ios-probe.yml` に追加しました。ユーザーのAltStore／SideStoreで再署名するため、CI成果物はunsigned IPAです。個人の証明書・Apple IDをCIへ渡しません。ビルド成否は対応するGitHub Actions runで確認し、アプリの存在を実機性能の証明とは扱いません。アプリの推論はユーザーのボタン操作に限定します。
+
 ## Ubuntuと実機測定
 
 Macはなく、iPhoneとUbuntuが利用可能という現在の環境では、学習とLinuxネイティブの推論検証をUbuntuで進めます。iPhoneネイティブアプリの最終ビルド・署名・配布には、別途macOS/Xcodeのビルド環境と適切な署名設定が必要です。CIのmacOSコンパイル確認をiPhoneでの動作確認とは呼びません。Appleの実機手順: https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices
