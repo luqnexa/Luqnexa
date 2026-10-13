@@ -2,7 +2,7 @@
 //! Conservative local grammar checks, not Mozc's statistical connection model.
 use std::sync::OnceLock;
 
-fn description(pos: &str, right: bool) -> &str {
+pub(crate) fn description(pos: &str, right: bool) -> &str {
     static IDS: OnceLock<Vec<&'static str>> = OnceLock::new();
     let mut fields = pos.split(':');
     if fields.next() != Some("mozc") {

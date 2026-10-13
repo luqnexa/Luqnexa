@@ -21,6 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     let mut temperature = None;
+    let mut forms = None;
+    if let Some(index) = args.iter().position(|arg| arg == "--forms") {
+        if index + 1 >= args.len() {
+            return Err("--forms needs a NUD path".into());
+        }
+        forms = Some(args.remove(index + 1));
+        args.remove(index);
+    }
     if args.len() >= 6 && args[args.len() - 2] == "--temperature" {
         temperature = Some(args.pop().unwrap().parse::<f32>()?);
         args.pop();
@@ -29,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || !["train", "validation", "test"].contains(&args[2].as_str())
     {
         return Err(
-            "usage: evaluate_neural MODEL JSONL SPLIT BASE.nud [OVERLAY.nxl] [--temperature FLOAT]"
+            "usage: evaluate_neural MODEL JSONL SPLIT BASE.nud [OVERLAY.nxl] [--forms FORMS.nud] [--temperature FLOAT]"
                 .into(),
         );
     }
@@ -39,15 +47,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         NeuralRanker::from_bytes(&bytes)?
     };
-    let engine = if let Some(overlay) = args.get(4) {
-        Engine::new(WithCommonPredictions::new(nexc_lite::LiteDictionary::open(
-            &args[3], overlay,
-        )?))
-    } else {
-        Engine::new(WithCommonPredictions::new(
-            nexc_lite::FileDictionary::open_with_cache(&args[3], 32)?,
+    let source: std::sync::Arc<dyn nextime_core::DictionarySource> =
+        if let Some(overlay) = args.get(4) {
+            std::sync::Arc::new(nexc_lite::LiteDictionary::open(&args[3], overlay)?)
+        } else {
+            std::sync::Arc::new(nexc_lite::FileDictionary::open_with_cache(&args[3], 32)?)
+        };
+    let source: std::sync::Arc<dyn nextime_core::DictionarySource> = if let Some(path) = &forms {
+        std::sync::Arc::new(nextime_dict::SupplementedDictionary::new(
+            source,
+            nexc_lite::FileDictionary::open(path)?,
         ))
+    } else {
+        source
     };
+    let engine = Engine::new(WithCommonPredictions::new(source));
     let mut rows = Vec::new();
     let mut totals = [0; 3];
     let mut coverage = [0; 3];
@@ -109,6 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "overlay_sha256": args.get(4).map(|p| hash(p)).transpose()?,
             "partition":args[2],"metrics":metrics,"rows":rows,
             "neural_ranking_temperature":temperature,
+            "forms_sha256":forms.as_deref().map(hash).transpose()?,
             "scope":"Real offline dictionary candidate generation and ranking; batch conversion, warm cache, synthetic context. Not key-by-key Session, phone, power, or general accuracy.",
             "training_during_evaluation":false,"installed":false,
             "host_os":std::env::consts::OS,"host_arch":std::env::consts::ARCH

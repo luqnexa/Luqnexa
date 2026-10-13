@@ -24,8 +24,9 @@ def compare(before, after):
         if a['reference_in_pool'] and not b['reference_in_pool']: pool_lost.append(details)
     return dict(partition=after['partition'], examples=len(after['rows']), improved=improved, regressed=regressed,
         before_temperature=before.get('neural_ranking_temperature'), after_temperature=after.get('neural_ranking_temperature'),
+        before_forms_sha256=before.get('forms_sha256'), after_forms_sha256=after.get('forms_sha256'),
         pool_gained=pool_gained, pool_lost=pool_lost, before_metrics=before['metrics'], after_metrics=after['metrics'],
-        scope='Same model/data/dictionary batch conversions; separate host timing runs are not controlled device speed or generalization proof')
+        scope='Same model/data/base dictionary; optional forms and temperature changes recorded explicitly. Separate host timings are not controlled device speed or generalization proof')
 
 
 def main():
