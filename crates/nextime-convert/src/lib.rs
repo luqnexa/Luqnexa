@@ -306,8 +306,21 @@ fn finish(result: &mut Vec<Candidate>, reading: &str, count: usize, limit: usize
 }
 
 fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, pos: &str) {
+    // Every caller's final beam is <=128. Keep a conservative score floor only
+    // after 128 distinct surface/POS paths exist; equal scores remain eligible.
+    let ceiling = MAX_CANDIDATES * 4;
+    if target.len() >= ceiling {
+        rank_paths(target, ceiling);
+    }
+    let mut floor = (target.len() == ceiling).then(|| target.last().unwrap().candidate.score);
     for prefix in prefixes {
         if !grammar::can_follow(&prefix.pos, pos) {
+            continue;
+        }
+        let combined_score = prefix.candidate.score
+            + score
+            + grammar::transition_score(&prefix.candidate.surface, surface);
+        if floor.is_some_and(|lowest| combined_score < lowest) {
             continue;
         }
         let mut combined = String::with_capacity(prefix.candidate.surface.len() + surface.len());
@@ -316,19 +329,70 @@ fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, 
         target.push(Path {
             candidate: Candidate {
                 surface: combined,
-                score: prefix.candidate.score
-                    + score
-                    + grammar::transition_score(&prefix.candidate.surface, surface),
+                score: combined_score,
                 segments: prefix.candidate.segments + 1,
             },
             pos: pos.into(),
         });
+        if target.len() >= ceiling * 2 {
+            rank_paths(target, ceiling);
+            floor = (target.len() == ceiling).then(|| target.last().unwrap().candidate.score);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn score_floor_pruning_matches_exhaustive_expansion_with_ties_and_duplicates() {
+        let mut prefixes: Vec<_> = (0..128)
+            .map(|i| Path {
+                candidate: Candidate {
+                    surface: format!("語{i:03}"),
+                    score: (i % 9) as i64 * 100,
+                    segments: 1 + i % 3,
+                },
+                pos: "noun".into(),
+            })
+            .collect();
+        prefixes[0].candidate.surface = "愛を".into();
+        prefixes[0].candidate.score = -1000;
+        let mut bounded = Vec::new();
+        let mut exhaustive = Vec::new();
+        for i in 0..32 {
+            let suffix = if i == 31 {
+                "掴め".to_owned()
+            } else {
+                format!("語尾{}", i % 12)
+            };
+            let score = (i % 7) as i64 * 30 - 100;
+            extend(&mut bounded, &prefixes, &suffix, score, "noun");
+            for prefix in &prefixes {
+                exhaustive.push(Path {
+                    candidate: Candidate {
+                        surface: format!("{}{suffix}", prefix.candidate.surface),
+                        score: prefix.candidate.score
+                            + score
+                            + grammar::transition_score(&prefix.candidate.surface, &suffix),
+                        segments: prefix.candidate.segments + 1,
+                    },
+                    pos: "noun".into(),
+                });
+            }
+        }
+        for limit in [4, 32, 128] {
+            let mut a = bounded.clone();
+            let mut b = exhaustive.clone();
+            rank_paths(&mut a, limit);
+            rank_paths(&mut b, limit);
+            assert_eq!(
+                a.iter().map(|p| (&p.candidate, &p.pos)).collect::<Vec<_>>(),
+                b.iter().map(|p| (&p.candidate, &p.pos)).collect::<Vec<_>>()
+            );
+        }
+        assert!(bounded.len() < 256);
+    }
     #[test]
     fn particle_chains_are_not_replaced_with_homophone_nouns_after_a_word() {
         let dictionary = nextime_dict::Dictionary::from_tsv(

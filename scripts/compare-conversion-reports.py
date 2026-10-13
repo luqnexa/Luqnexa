@@ -33,7 +33,8 @@ def main():
     parser.add_argument('after', type=Path)
     args = parser.parse_args()
     load = lambda path: json.loads(path.read_text(encoding='utf-8-sig'))
-    print(json.dumps(compare(load(args.before), load(args.after)), ensure_ascii=False, indent=2))
+    # ASCII JSON escapes preserve Japanese under Windows stdout code pages.
+    print(json.dumps(compare(load(args.before), load(args.after)), ensure_ascii=True, indent=2))
 
 
 if __name__ == '__main__':
