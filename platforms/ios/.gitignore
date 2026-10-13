@@ -1,0 +1,4 @@
+/build/
+/Resources/*.lqml
+/Resources/training-report.json
+/*.xcodeproj/

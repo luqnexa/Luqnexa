@@ -1,0 +1,40 @@
+name: LuqnexaProbe
+options:
+  bundleIdPrefix: org.luqnexa
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    SWIFT_OBJC_BRIDGING_HEADER: "$(PROJECT_DIR)/Bridge.h"
+    HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/../../crates/nextime-ffi/include"
+    OTHER_LDFLAGS: ["$(inherited)", "-liconv", "-lresolv"]
+targets:
+  LuqnexaProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Resources/model.lqml
+        buildPhase: resources
+      - path: Resources/training-report.json
+        buildPhase: resources
+    dependencies:
+      - framework: build/libnextime_ffi.a
+        embed: false
+    info:
+      path: build/Info.plist
+      properties:
+        CFBundleDisplayName: Luqnexa検証
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.luqnexa.probe
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  LuqnexaProbe:
+    build:
+      targets:
+        LuqnexaProbe: all
