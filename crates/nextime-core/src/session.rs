@@ -106,6 +106,17 @@ impl Session {
     pub fn candidates(&self) -> &[Candidate] {
         &self.candidates
     }
+    /// Read-only score diagnostic. Only selected Japanese conversions have the
+    /// native model contribution; explicit English input remains literal.
+    pub fn native_candidate_bonus(&self, index: usize) -> Option<i64> {
+        self.candidates.get(index).map(|candidate| {
+            if self.ai && self.selecting && !self.english {
+                nextime_ai::Model::bundled().native_bonus(&self.context, &candidate.surface)
+            } else {
+                0
+            }
+        })
+    }
     pub fn selected_index(&self) -> Option<usize> {
         if self.candidates.is_empty() || !self.selecting {
             None

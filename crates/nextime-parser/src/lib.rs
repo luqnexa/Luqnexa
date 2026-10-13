@@ -14,6 +14,30 @@ pub fn to_preedit(input: &str) -> String {
     parse(input, false)
 }
 
+/// Bounded conversion alternatives for an omitted n/apostrophe boundary,
+/// e.g. shinya -> shin'ya. The ordinary parser and live preedit are unchanged.
+/// Only two single-boundary alternatives are returned; no exponential search.
+pub fn ambiguous_n_inputs(input: &str) -> Vec<String> {
+    let bytes = input.as_bytes();
+    let mut result = Vec::new();
+    for (i, window) in bytes.windows(3).enumerate() {
+        if window[0] == b'n'
+            && window[1] == b'y'
+            && b"aou".contains(&window[2])
+            && (i == 0 || bytes[i - 1] != b'n')
+        {
+            let mut alternative = input.to_owned();
+            // n is ASCII, hence this is always a UTF-8 character boundary.
+            alternative.insert(i + 1, '\'');
+            result.push(alternative);
+            if result.len() == 2 {
+                break;
+            }
+        }
+    }
+    result
+}
+
 fn parse(input: &str, finalize: bool) -> String {
     let input: String = input
         .chars()

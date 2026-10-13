@@ -42,3 +42,5 @@ cargo run --release -p nextime-cli -- hashi
 ## 2026-10-13 更新
 
 候補変換・混在入力の回帰テストを更新しました。辞書配信と暗号化Memoryの試作は [Luqnexa-Server](https://github.com/Luqnexa/Luqnexa-Server) を参照してください。Windowsは試作段階で、今回のソース公開は稼働中IMEの更新ではありません。
+
+Rust製int8候補モデルと明示的なC APIを追加しました。モデルは約162KiBです。詳細は [Rustモデル](docs/rust-mobile-model.md)。精度90%超・IME全体p95 5ms以内・iPhone実機の低CPU負荷は未達成または未検証です。モデル推論単体のホスト測定とは区別します。

@@ -320,6 +320,35 @@ fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, 
 mod tests {
     use super::*;
     #[test]
+    fn curated_nouns_do_not_bypass_imported_word_constraints() {
+        // Curated noun compounds remain supported. Imported arbitrary noun
+        // combinations retain their restriction, including after curated nouns.
+        assert!(grammar::can_follow("noun", "noun"));
+        assert!(!grammar::can_follow("noun", "mozc:1851:1851:0"));
+        assert!(grammar::can_follow("mozc:1851:1851:0", "noun"));
+        assert!(!grammar::can_follow("noun", "suru-suffix"));
+        assert!(grammar::can_follow("sahen", "suru-suffix"));
+        assert!(grammar::can_follow("noun", "particle"));
+        // Registered compounds still take the whole-word path.
+        let dictionary = Dictionary::from_tsv(
+            "かさ\t傘\tnoun\t9000\nやま\t山\tnoun\t9000\nかさやま\t傘山\tnoun\t9000\n",
+        )
+        .unwrap();
+        assert_eq!(
+            convert(&dictionary, "かさやま", 4).unwrap()[0].surface,
+            "傘山"
+        );
+        let unregistered =
+            Dictionary::from_tsv("かさ\t傘\tnoun\t9000\nやま\t山\tmozc:1851:1851:0\t9000\n")
+                .unwrap();
+        assert!(
+            convert(&unregistered, "かさやま", 4)
+                .unwrap()
+                .iter()
+                .all(|c| c.surface != "傘山")
+        );
+    }
+    #[test]
     fn desire_conjugations_do_not_split_into_homophone_nouns() {
         let dict = Dictionary::from_tsv(
             "べんきょう\t勉強\tsahen\t6000\nけんさく\t検索\tmozc:1841:1841:100\t6000\nした\tした\tphrase\t9000\nしたい\t死体\tnoun\t9000\nい\t位\tnoun\t10000\nい\t医\tnoun\t10000\nい\t胃\tnoun\t10000"

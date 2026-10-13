@@ -17,6 +17,8 @@ pub const BUFFER_TOO_SMALL: i32 = 4;
 pub const INPUT_LIMIT: i32 = 5;
 pub const DICTIONARY_ERROR: i32 = 6;
 pub const INTERNAL_ERROR: i32 = 7;
+#[cfg(feature = "mobile-neural")]
+pub mod neural;
 
 #[derive(Debug)]
 struct State {

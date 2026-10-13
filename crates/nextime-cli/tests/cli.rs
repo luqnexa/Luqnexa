@@ -77,6 +77,30 @@ fn session_demo_selects_only_on_enter() {
 }
 
 #[test]
+fn score_diagnostic_does_not_select_commit_or_enable_learning() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_nextime"))
+        .arg("session")
+        .env("LUQNEXA_AI_BACKEND", "original")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"training\ntext hashi\nspace\nscores\nenter\nquit\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("score: 1 "));
+    assert_eq!(text.matches("commit:").count(), 1);
+    assert!(text.contains("commit: 橋"));
+    assert!(!text.contains("learning: on"));
+}
+
+#[test]
 fn dictionary_cli_build_verify_convert_register_and_unpack() {
     use std::fs;
     let directory =

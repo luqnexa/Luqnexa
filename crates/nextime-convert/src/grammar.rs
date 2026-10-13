@@ -19,6 +19,10 @@ fn description(pos: &str, right: bool) -> &str {
     id.and_then(|i| ids.get(i).copied()).unwrap_or("")
 }
 
+fn is_noun(pos: &str) -> bool {
+    pos.starts_with("名詞") || matches!(pos, "noun" | "sahen")
+}
+
 pub fn can_follow(previous: &str, current: &str) -> bool {
     let previous = description(previous, true);
     let current = description(current, false);
@@ -26,32 +30,29 @@ pub fn can_follow(previous: &str, current: &str) -> bool {
         return true;
     }
     if current == "connective" {
-        return previous.starts_with("名詞")
-            || matches!(previous, "noun" | "english" | "slang-en" | "sahen");
+        return is_noun(previous) || matches!(previous, "noun" | "english" | "slang-en" | "sahen");
     }
     // Unregistered noun compounds are ambiguous; preserve kana instead of
     // manufacturing arbitrary names/one-character kanji compounds.
-    if (previous.starts_with("名詞") || matches!(previous, "english" | "slang-en"))
+    if (is_noun(previous) || matches!(previous, "english" | "slang-en"))
         && current.starts_with("名詞")
     {
         return previous.contains("接頭") || current.contains("接尾");
     }
-    if current.contains("サ変・スル") && previous.starts_with("名詞") {
-        return previous.contains("サ変接続");
+    if current.contains("サ変・スル") && is_noun(previous) {
+        return previous.contains("サ変接続") || previous == "sahen";
     }
     if current == "suru-suffix" {
         return previous.contains("サ変接続") || previous == "sahen";
     }
-    if previous.starts_with("名詞") && current.contains("特殊・マス") {
+    if is_noun(previous) && current.contains("特殊・マス") {
         return false;
     }
-    if previous.starts_with("動詞") && !previous.contains("基本形") && current.starts_with("名詞")
-    {
+    if previous.starts_with("動詞") && !previous.contains("基本形") && is_noun(current) {
         return previous.contains("連用") && current.contains("接尾");
     }
     // Verb/adjective suffixes must not be attached to arbitrary names/nouns.
-    if previous.starts_with("名詞")
-        && (current.starts_with("動詞") || current.starts_with("形容詞,非自立"))
+    if is_noun(previous) && (current.starts_with("動詞") || current.starts_with("形容詞,非自立"))
     {
         return false;
     }

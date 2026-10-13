@@ -24,3 +24,8 @@ nexc-max = { path = "modules/NEXC/crates/nexc-max" }
 nextime-dict = { path = "modules/NEXC/crates/nextime-dict" }
 nextime-ai = { path = "modules/Luqnexa-AI/crates/nextime-ai" }
 nextime-ranker = { path = "modules/Luqnexa-AI/crates/nextime-ranker" }
+
+luqnexa-ml = { path = "modules/Luqnexa-AI/crates/luqnexa-ml" }
+
+serde_json = '=1.0.140'
+sha2 = '0.10.9'

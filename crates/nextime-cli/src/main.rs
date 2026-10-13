@@ -9,6 +9,13 @@ use std::{
 };
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--model-info") {
+        let (model, anchors, research) = nextime_ai::native_model_identity();
+        println!(
+            "{{\"model_sha256\":\"{model}\",\"anchors_sha256\":\"{anchors}\",\"research_model\":{research}}}"
+        );
+        return;
+    }
     if let Err(error) = run() {
         eprintln!("nextime: {error}");
         std::process::exit(1);

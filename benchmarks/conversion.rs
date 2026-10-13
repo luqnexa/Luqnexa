@@ -49,6 +49,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     measure("sample/mixed", &sample, iterations, |i| {
         mixed[i % mixed.len()].into()
     });
+    let learned = Engine::new(Dictionary::from_tsv(
+        "zephyrcode\tZephyrCode\tenglish\t10000\nで\tで\tparticle\t9000\nを\tを\tparticle\t9000\nよむ\t読む\tverb\t8000\n",
+    )?);
+    let learned_inputs = ["zephyrcode", "zephyrcodede", "zephyrcodewoyomu"];
+    measure(
+        "active_dictionary/mixed_english",
+        &learned,
+        iterations,
+        |i| learned_inputs[i % learned_inputs.len()].into(),
+    );
     measure(
         "sample/long_128_chars",
         &sample,

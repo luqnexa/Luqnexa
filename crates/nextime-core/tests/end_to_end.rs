@@ -448,6 +448,66 @@ fn new_english_vocabulary_works_with_old_dictionary_and_japanese_particles() {
 }
 
 #[test]
+fn active_dictionary_english_words_survive_romaji_particles() {
+    // This spelling is intentionally outside the bundled vocabulary. Updating
+    // the dictionary must work for mixed text as well as standalone words.
+    let dictionary =
+        Dictionary::from_tsv("zephyrcode\tZephyrCode\tenglish\t10000\nで\tで\tparticle\t9000\n")
+            .unwrap();
+    let engine = Engine::new(dictionary);
+    for live in [false, true] {
+        assert_eq!(engine.normalize_input("zephyrcode", live), "zephyrcode");
+        assert_eq!(engine.normalize_input("zephyrcodede", live), "zephyrcodeで");
+        for (suffix, reading) in [
+            ("karayomu", "からよむ"),
+            ("mademotsu", "までもつ"),
+            ("yorihayai", "よりはやい"),
+            ("ttetaihendayo", "ってたいへんだよ"),
+            ("heokuru", "へおくる"),
+            ("yasorawoyomu", "やそらをよむ"),
+        ] {
+            assert_eq!(
+                engine.normalize_input(&format!("zephyrcode{suffix}"), live),
+                format!("zephyrcode{reading}")
+            );
+        }
+        assert_eq!(
+            engine.normalize_input("zephyrcodewoyomu", live),
+            "zephyrcodeをよむ"
+        );
+        // A recognized word does not license arbitrary prefix splitting.
+        assert_ne!(
+            engine.normalize_input("zephyrcodexyz", live),
+            "zephyrcodexyz"
+        );
+    }
+}
+
+#[test]
+fn omitted_n_boundary_is_an_alternative_not_a_preedit_rewrite() {
+    let dictionary =
+        Dictionary::from_tsv("しんや\t深夜\tnoun\t10000\nです\tです\tparticle\t9000\n").unwrap();
+    let engine = Engine::new(dictionary);
+    assert_eq!(engine.normalize_input("shinyadesu", true), "しにゃです");
+    let result = engine.convert("shinyadesu", 8).unwrap();
+    assert_eq!(result.reading, "しにゃです");
+    assert_eq!(result.candidates[0].surface, "深夜です");
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == result.reading)
+    );
+    assert_eq!(nextime_parser::ambiguous_n_inputs("🙂nyanyanyan").len(), 2);
+    assert!(nextime_parser::ambiguous_n_inputs("shinnya").is_empty());
+    let exact = Engine::new(Dictionary::from_tsv("にゃ\tにゃ\tnoun\t1000\n").unwrap());
+    assert_eq!(
+        exact.convert("nya", 8).unwrap().candidates[0].surface,
+        "にゃ"
+    );
+}
+
+#[test]
 #[ignore = "Explicit million-case audit; run in release mode with --ignored"]
 fn million_normalization_checks() {
     let engine = Engine::bundled();

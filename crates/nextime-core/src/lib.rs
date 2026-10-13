@@ -15,6 +15,8 @@ pub use nextime_dict::{
 };
 pub use nextime_ranker::Candidate;
 mod session;
+#[cfg(feature = "mobile-neural")]
+pub use nextime_ai::mobile::NeuralRanker;
 pub use session::{Key, Outcome, Session, SessionError};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -29,6 +31,27 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Explicit Rust neural conversion. The caller supplies an already loaded,
+    /// provenance-checked model and consented context. No bundled LLM is called.
+    #[cfg(feature = "mobile-neural")]
+    pub fn convert_with_neural(
+        &self,
+        input: &str,
+        context: &str,
+        model: &NeuralRanker,
+        limit: usize,
+    ) -> Result<Conversion, ConvertError> {
+        if !(1..=MAX_CANDIDATES).contains(&limit) {
+            return Err(ConvertError::InvalidLimit);
+        }
+        // Keep the whole bounded candidate pool until the learned reranking.
+        let mut result = self.convert(input, MAX_CANDIDATES)?;
+        model
+            .rerank(input, context, &mut result.candidates, limit)
+            .map_err(|_| ConvertError::InvalidLimit)?;
+        Ok(result)
+    }
+
     /// Conversion-time alternatives only; live preedit and literal input stay intact.
     fn corrected_reading(&self, input: &str) -> String {
         let words: Vec<_> = input.split(' ').collect();
@@ -145,10 +168,17 @@ impl Engine {
             let split = ascii
                 .then(|| {
                     (2..run.len()).rev().find(|&i| {
-                        ["ga", "wo", "ha", "ni", "de", "to", "mo", "no"]
+                        [
+                            "ga", "wo", "ha", "ni", "de", "to", "mo", "no", "kara", "made",
+                            "yori", "tte", "he", "ya",
+                        ]
                             .iter()
                             .any(|p| lower[i..].starts_with(p))
-                            && Self::common_english(&run[..i])
+                            // The active base/dynamic dictionary may contain
+                            // learned English words absent from the bundled
+                            // starter lexicon. Use the same recognition rule
+                            // here as for a standalone word.
+                            && self.is_english_word(&run[..i])
                     })
                 })
                 .flatten();
@@ -300,7 +330,43 @@ impl Engine {
                 candidates,
             });
         }
-        let candidates = nextime_convert::convert(self.dictionary.as_ref(), &reading, limit)?;
+        let mut candidates = nextime_convert::convert(self.dictionary.as_ref(), &reading, limit)?;
+        // The canonical reading is never changed. Missing n-boundaries are
+        // conversion alternatives evaluated against actual dictionary entries,
+        // with a penalty and a strict bound. Exact words keep their semantics.
+        let alternatives = nextime_parser::ambiguous_n_inputs(input);
+        if !alternatives.is_empty()
+            && self
+                .dictionary
+                .lookup(&reading, 1)
+                .map_err(ConvertError::Dictionary)?
+                .is_empty()
+        {
+            let literal = candidates.iter().find(|c| c.surface == reading).cloned();
+            for alternative in alternatives {
+                let other = self.normalize_input(&alternative, false);
+                if other == reading {
+                    continue;
+                }
+                for mut candidate in
+                    nextime_convert::convert(self.dictionary.as_ref(), &other, limit)?
+                {
+                    candidate.score = candidate.score.saturating_sub(256);
+                    candidates.push(candidate);
+                }
+            }
+            nextime_ranker::rank(&mut candidates, limit);
+            if limit > 1 {
+                if let Some(literal) = literal {
+                    if !candidates.iter().any(|c| c.surface == reading) {
+                        if candidates.len() == limit {
+                            candidates.pop();
+                        }
+                        candidates.push(literal);
+                    }
+                }
+            }
+        }
         Ok(Conversion {
             reading,
             candidates,

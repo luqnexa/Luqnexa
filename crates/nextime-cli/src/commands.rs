@@ -9,7 +9,7 @@ use std::{
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
         println!(
-            "Dictionary commands:\n  nextime dict build INPUT.tsv OUTPUT.nud [GENERATION]\n  nextime dict verify FILE.nud\n  nextime dict unpack FILE.nud  (TSV to stdout)\n  nextime dict add BASE.nud JOURNAL.nxl READING SURFACE POS FREQUENCY\nBuild refuses to overwrite an existing output. Add stores only the explicitly supplied word locally."
+            "Dictionary commands:\n  nextime dict build INPUT.tsv OUTPUT.nud [GENERATION]\n  nextime dict verify FILE.nud\n  nextime dict unpack FILE.nud  (TSV to stdout)\n  nextime dict add BASE.nud JOURNAL.nxl READING SURFACE POS FREQUENCY\n  nextime dict add-tsv BASE.nud JOURNAL.nxl INPUT.tsv\nBuild refuses to overwrite an existing output. Add stores only explicitly supplied words locally. Bulk TSV is validated before any append."
         );
         return Ok(());
     }
@@ -59,6 +59,25 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
             })?;
             println!(
                 "saved locally; overlay_entries={}; journal_bytes={}",
+                dict.overlay_len(),
+                dict.journal_bytes()?
+            );
+        }
+        "add-tsv" if args.len() == 4 => {
+            if std::fs::metadata(&args[3])?.len() > 16 * 1024 * 1024 {
+                return Err("bulk word TSV exceeds 16 MiB".into());
+            }
+            let additions = Dictionary::from_tsv(&std::fs::read_to_string(&args[3])?)?;
+            if additions.len() > 100_000 {
+                return Err("bulk word TSV exceeds 100000 entries".into());
+            }
+            let mut dict = LiteDictionary::open(&args[1], &args[2])?;
+            for entry in additions.entries() {
+                dict.insert(entry.clone())?;
+            }
+            println!(
+                "saved locally; appended={}; overlay_entries={}; journal_bytes={}",
+                additions.len(),
                 dict.overlay_len(),
                 dict.journal_bytes()?
             );

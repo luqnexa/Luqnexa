@@ -21,6 +21,29 @@ pub fn run(
         if line == "quit" {
             break;
         }
+        if line == "scores" {
+            for (index, candidate) in session.candidates().iter().enumerate() {
+                writeln!(
+                    output,
+                    "score: {} {} {}",
+                    index + 1,
+                    candidate.score,
+                    session.native_candidate_bonus(index).unwrap_or(0)
+                )?;
+            }
+            writeln!(
+                output,
+                "learning: {} features={}",
+                if session.text_learning_enabled() && session.ai_enabled() {
+                    "on"
+                } else {
+                    "off"
+                },
+                session.learned_text_features()
+            )?;
+            output.flush()?;
+            continue;
+        }
         let key = if let Some(text) = line.strip_prefix("text ") {
             Key::Text(text)
         } else {

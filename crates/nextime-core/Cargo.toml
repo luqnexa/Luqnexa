@@ -5,12 +5,20 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+mobile-neural = ["nextime-ai/mobile-neural"]
+
 [dependencies]
 nextime-ai.workspace = true
 nextime-parser.workspace = true
 nextime-dict.workspace = true
 nextime-convert.workspace = true
 nextime-ranker.workspace = true
+
+[dev-dependencies]
+nexc-lite.workspace = true
+nexc-max.workspace = true
+luqnexa-ml.workspace = true
 
 [[bench]]
 name = "conversion"
@@ -25,5 +33,11 @@ harness = false
 [[bench]]
 name = "context"
 path = "../../benchmarks/context.rs"
+harness = false
+
+
+[[bench]]
+name = 'compressed_conversion'
+path = '../../benchmarks/compressed_conversion.rs'
 harness = false
 

@@ -1,0 +1,33 @@
+name: Explicit mobile neural integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo test -p nextime-core -p nextime-ffi --features mobile-neural --locked
+      - run: cargo clippy -p nextime-core -p nextime-ffi --all-targets --features mobile-neural --locked -- -D warnings
+  cross-check:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: aarch64-linux-android
+          - os: macos-latest
+            target: aarch64-apple-ios
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo check -p nextime-core -p nextime-ffi --features mobile-neural --target ${{ matrix.target }} --locked

@@ -64,4 +64,31 @@ fn main() {
         samples[1899],
         samples[1999]
     );
+    let context = "変換の評価について、表示された文章の雰囲気と読みやすさを確認します。";
+    let candidates: Vec<_> = (0..8)
+        .map(|i| nextime_core::Candidate {
+            surface: format!(
+                "こんな{}で精度がいいよ。{}",
+                if i % 2 == 0 { "感じ" } else { "漢字" },
+                "追加の表示内容を確認します。".repeat(5)
+            ),
+            score: i * 10,
+            segments: 4,
+        })
+        .collect();
+    let mut samples = Vec::new();
+    for i in 0..600 {
+        let mut candidates = candidates.clone();
+        let start = Instant::now();
+        model.rerank(context, &mut candidates, 8);
+        black_box(candidates);
+        if i >= 100 {
+            samples.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+    }
+    samples.sort_by(f64::total_cmp);
+    println!(
+        "contrast/long_candidates=8 iterations=500 warmup=100 ranking_only p50_ms={:.4} p95_ms={:.4} max_ms={:.4}",
+        samples[249], samples[474], samples[499]
+    );
 }
