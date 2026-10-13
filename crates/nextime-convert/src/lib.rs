@@ -4,6 +4,7 @@ use nextime_dict::{DictionarySource, LookupError};
 use nextime_ranker::{Candidate, UNKNOWN_SCORE, rank, word_score};
 mod grammar;
 mod inflection;
+pub mod statistical;
 pub use inflection::productive_forms;
 
 #[derive(Clone)]
