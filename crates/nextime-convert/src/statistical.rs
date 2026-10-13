@@ -57,12 +57,18 @@ impl ConnectionCosts {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Path {
     surface: String,
     cost: i64,
     right: usize,
     segments: usize,
+}
+#[derive(Clone, Default)]
+struct Beam {
+    paths: Vec<Path>,
+    floor: Option<i64>,
+    terminal: bool,
 }
 fn prune(paths: &mut Vec<Path>, limit: usize) {
     paths.sort_unstable_by(|a, b| {
@@ -94,7 +100,7 @@ fn ids(entry: &Entry, size: usize, noun: usize) -> Result<(usize, usize, i64), C
     }
 }
 fn append(
-    target: &mut Vec<Path>,
+    target: &mut Beam,
     prefix: &Path,
     surface: &str,
     left: usize,
@@ -102,16 +108,27 @@ fn append(
     word_cost: i64,
     costs: &ConnectionCosts,
 ) {
+    let cost = prefix.cost + word_cost + costs.cost(prefix.right, left).unwrap();
+    // 128 distinct surface/right states already beat this cost. Keep ties.
+    // Terminal states are exempt: EOS may reverse their base-cost order.
+    if target.floor.is_some_and(|floor| cost > floor) {
+        return;
+    }
     let mut text = prefix.surface.clone();
     text.push_str(surface);
-    target.push(Path {
+    target.paths.push(Path {
         surface: text,
-        cost: prefix.cost + word_cost + costs.cost(prefix.right, left).unwrap(),
+        cost,
         right,
         segments: prefix.segments + 1,
     });
-    if target.len() >= 256 {
-        prune(target, 128);
+    if target.paths.len() >= 256 {
+        prune(&mut target.paths, 128);
+        target.floor = if !target.terminal && target.paths.len() == 128 {
+            target.paths.last().map(|path| path.cost)
+        } else {
+            None
+        };
     }
 }
 /// Approximate N-best search. No hard grammatical exclusions; statistical costs
@@ -167,16 +184,17 @@ pub fn convert_with_entered(
         })
         .filter(|&id| id < costs.size)
         .unwrap_or(0);
-    let mut beams = vec![Vec::<Path>::new(); count + 1];
-    beams[0].push(Path {
+    let mut beams = vec![Beam::default(); count + 1];
+    beams[count].terminal = true;
+    beams[0].paths.push(Path {
         surface: String::new(),
         cost: 0,
         right: 0,
         segments: 0,
     });
     for start in 0..count {
-        prune(&mut beams[start], 128);
-        let prefixes = std::mem::take(&mut beams[start]);
+        prune(&mut beams[start].paths, 128);
+        let prefixes = std::mem::take(&mut beams[start].paths);
         let last = (start + dictionary.max_reading_chars()).min(count);
         let slices: Vec<_> = (start + 1..=last)
             .map(|end| &reading[boundaries[start]..boundaries[end]])
@@ -244,6 +262,7 @@ pub fn convert_with_entered(
         }
     }
     let mut result: Vec<_> = beams[count]
+        .paths
         .iter()
         .map(|path| Candidate {
             surface: path.surface.clone(),
@@ -258,6 +277,47 @@ pub fn convert_with_entered(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cost_floor_matches_unfiltered_expansion_with_duplicates_ties_and_eos() {
+        let costs = ConnectionCosts::from_text(&b"3\n0\n-200\n70\n900\n0\n-90\n-1000\n10\n0\n"[..])
+            .unwrap();
+        for terminal in [false, true] {
+            let mut fast = Beam {
+                terminal,
+                ..Beam::default()
+            };
+            let mut reference = Vec::new();
+            for i in 0..5000 {
+                let prefix = Path {
+                    surface: format!("前{}", i % 173),
+                    cost: (i * 73 % 191) as i64 - 30,
+                    right: i % 3,
+                    segments: i % 5,
+                };
+                let surface = if i % 2 == 0 { "末" } else { "尾" };
+                let left = (i / 3) % 3;
+                let right = (i / 7) % 3;
+                let word_cost = (i * 37 % 101) as i64 - 50;
+                append(&mut fast, &prefix, surface, left, right, word_cost, &costs);
+                reference.push(Path {
+                    surface: format!("{}{surface}", prefix.surface),
+                    cost: prefix.cost + word_cost + costs.cost(prefix.right, left).unwrap(),
+                    right,
+                    segments: prefix.segments + 1,
+                });
+                if reference.len() >= 256 {
+                    prune(&mut reference, 128);
+                }
+            }
+            if terminal {
+                assert_eq!(fast.paths, reference);
+                assert!(fast.floor.is_none());
+            }
+            prune(&mut fast.paths, 128);
+            prune(&mut reference, 128);
+            assert_eq!(fast.paths, reference);
+        }
+    }
     #[test]
     fn matrix_is_directional_and_rejects_incomplete_or_excess_data() {
         let model = ConnectionCosts::from_text(&b"2\n0\n5\n19\n3\n"[..]).unwrap();
