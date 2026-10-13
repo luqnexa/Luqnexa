@@ -24,9 +24,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Ok(format!("{:x}", sha.finalize()))
     }
-    let args: Vec<_> = std::env::args().skip(1).collect();
+    let mut args: Vec<_> = std::env::args().skip(1).collect();
+    let mut temperature = None;
+    if args.len() == 9 && args[7] == "--temperature" {
+        temperature = Some(args.pop().unwrap().parse::<f32>()?);
+        args.pop();
+    }
     if args.len() != 7 || !["train", "validation", "test"].contains(&args[2].as_str()) {
-        return Err("usage: evaluate_statistical MATRIX.txt DATA.jsonl SPLIT BASE.nud OVERLAY.nxl FORMS.nud MODEL.lqml".into());
+        return Err("usage: evaluate_statistical MATRIX.txt DATA.jsonl SPLIT BASE.nud OVERLAY.nxl FORMS.nud MODEL.lqml [--temperature FLOAT]".into());
     }
     let costs = ConnectionCosts::from_text(BufReader::new(std::fs::File::open(&args[0])?))?;
     let source = Arc::new(WithCommonPredictions::new(
@@ -36,7 +41,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     ));
     let engine = Engine::new(source.clone());
-    let neural = NeuralRanker::from_bytes(&std::fs::read(&args[6])?)?;
+    let bytes = std::fs::read(&args[6])?;
+    let neural = if let Some(value) = temperature {
+        NeuralRanker::from_bytes_with_temperature(&bytes, value)?
+    } else {
+        NeuralRanker::from_bytes(&bytes)?
+    };
     let mut rows = Vec::new();
     let mut totals = [0; 3];
     let mut pools = [0; 3];
@@ -64,7 +74,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut candidates = statistical::convert(source.as_ref(), &costs, &reading, 32)?;
                 if mode == 2 {
                     neural
-                        .rerank(&reading, context, &mut candidates, 32)
+                        // The trainer hashes raw input, just like Engine's neural path.
+                        // Normalized kana is only the dictionary search key.
+                        .rerank(input, context, &mut candidates, 32)
                         .map_err(|reason| {
                             nextime_core::ConvertError::Dictionary(nextime_core::LookupError(
                                 reason.into(),
@@ -106,7 +118,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "matrix_sha256":hash(&args[0])?,"dataset_sha256":hash(&args[1])?,"dictionary_sha256":hash(&args[3])?,
         "overlay_sha256":hash(&args[4])?,"forms_sha256":hash(&args[5])?,"model_sha256":hash(&args[6])?,
         "matrix_dimension":costs.dimension(),"matrix_resident_bytes":costs.resident_bytes(),
-        "installed":false,"training_during_evaluation":false,
+        "installed":false,"training_during_evaluation":false,"neural_input":"raw_input_matching_trainer",
+        "neural_ranking_temperature":temperature,
         "scope":"Bounded batch conversion, warm cache Windows host. Public third-party connection costs, own Rust search. Not mobile, power or independent blind accuracy."}))?
     );
     Ok(())

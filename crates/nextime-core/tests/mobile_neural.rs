@@ -3,6 +3,28 @@
 use nextime_core::{ConvertError, Engine, NeuralRanker};
 
 #[test]
+fn neural_conversion_uses_the_same_raw_input_features_as_training() {
+    let mut trainer = luqnexa_ml::Trainer::new_interaction(73);
+    for _ in 0..300 {
+        trainer.learn("hashi", "食器", "箸", "橋", 0.1).unwrap();
+    }
+    let model = NeuralRanker::from_bytes(&trainer.quantize().to_bytes()).unwrap();
+    let engine = Engine::bundled();
+    let mut expected = engine.convert("hashi", 32).unwrap().candidates;
+    model.rerank("hashi", "食器", &mut expected, 32).unwrap();
+    let actual = engine
+        .convert_with_neural("hashi", "食器", &model, 32)
+        .unwrap();
+    for candidate in actual.candidates {
+        let direct = expected
+            .iter()
+            .find(|e| e.surface == candidate.surface)
+            .unwrap();
+        assert_eq!(candidate.score, direct.score);
+    }
+}
+
+#[test]
 fn explicit_neural_path_retains_the_real_dictionary_candidate_pool() {
     let bytes = luqnexa_ml::Trainer::new(1337).quantize().to_bytes();
     let model = NeuralRanker::from_bytes(&bytes).unwrap();
