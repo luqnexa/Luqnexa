@@ -19,6 +19,8 @@ nextime-ranker.workspace = true
 nexc-lite.workspace = true
 nexc-max.workspace = true
 luqnexa-ml.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 
 [[bench]]
 name = "conversion"

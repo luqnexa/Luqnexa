@@ -146,6 +146,8 @@ dependencies = [
  "nextime-dict",
  "nextime-parser",
  "nextime-ranker",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
