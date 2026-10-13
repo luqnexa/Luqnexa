@@ -120,6 +120,7 @@ name = "nextime-core"
 version = "0.1.0"
 dependencies = [
  "nexc-lite",
+ "nexc-max",
  "nextime-convert",
  "nextime-dict",
  "nextime-parser",

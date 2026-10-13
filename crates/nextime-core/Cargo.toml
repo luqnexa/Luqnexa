@@ -13,6 +13,7 @@ nextime-ranker.workspace = true
 
 [dev-dependencies]
 nexc-lite.workspace = true
+nexc-max.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 
@@ -24,4 +25,9 @@ harness = false
 [[bench]]
 name = "session"
 path = "../../benchmarks/session.rs"
+harness = false
+
+[[bench]]
+name = "compressed_conversion"
+path = "../../benchmarks/compressed_conversion.rs"
 harness = false
