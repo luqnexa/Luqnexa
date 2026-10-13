@@ -15,6 +15,7 @@ pub use nextime_dict::{
 };
 pub use nextime_ranker::Candidate;
 mod session;
+mod typing;
 pub mod width;
 #[cfg(feature = "mobile-neural")]
 pub use nextime_ai::mobile::NeuralRanker;
@@ -518,6 +519,15 @@ impl Engine {
                         });
                     }
                 }
+            }
+        }
+        for candidate in self.mixed_typo_candidates(input)? {
+            if !result
+                .candidates
+                .iter()
+                .any(|old| old.surface == candidate.surface)
+            {
+                result.candidates.push(candidate);
             }
         }
         Ok(result)
