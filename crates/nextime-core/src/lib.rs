@@ -48,6 +48,11 @@ impl Engine {
         }
         // Keep the whole bounded candidate pool until the learned reranking.
         let mut result = self.conversion_candidates(input, MAX_CANDIDATES)?;
+        // Explicit research path: make attested case options available to this model.
+        // Preserve standalone Latin input and explicit Shift/case-sensitive identifiers.
+        if !self.is_english_word(input) && !input.chars().any(|c| c.is_ascii_uppercase()) {
+            nextime_ai::dictionary_case_candidates(&mut result.candidates);
+        }
         let literal = result
             .candidates
             .iter()

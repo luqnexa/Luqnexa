@@ -60,3 +60,23 @@ fn neural_path_can_rank_dictionary_verified_typo_candidates_without_an_llm() {
     );
     assert!(result.candidates.len() <= 32);
 }
+
+#[test]
+fn explicit_neural_path_offers_registered_case_without_overriding_shift() {
+    let model =
+        NeuralRanker::from_bytes(&luqnexa_ml::Trainer::new(2).quantize().to_bytes()).unwrap();
+    let engine = Engine::bundled();
+    let result = engine
+        .convert_with_neural("githubde", "", &model, 32)
+        .unwrap();
+    assert!(result.candidates.iter().any(|c| c.surface == "GitHubで"));
+    for input in ["github", "GITHUBde"] {
+        let result = engine.convert_with_neural(input, "", &model, 32).unwrap();
+        assert!(
+            !result
+                .candidates
+                .iter()
+                .any(|c| c.surface.contains("GitHub"))
+        );
+    }
+}
