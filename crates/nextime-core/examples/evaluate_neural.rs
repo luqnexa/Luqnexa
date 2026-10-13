@@ -19,13 +19,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Ok(format!("{:x}", hasher.finalize()))
     }
-    let args: Vec<_> = std::env::args().skip(1).collect();
+    let mut args: Vec<_> = std::env::args().skip(1).collect();
+    let mut temperature = None;
+    if args.len() >= 6 && args[args.len() - 2] == "--temperature" {
+        temperature = Some(args.pop().unwrap().parse::<f32>()?);
+        args.pop();
+    }
     if !(4..=5).contains(&args.len())
         || !["train", "validation", "test"].contains(&args[2].as_str())
     {
-        return Err("usage: evaluate_neural MODEL JSONL SPLIT BASE.nud [OVERLAY.nxl]".into());
+        return Err(
+            "usage: evaluate_neural MODEL JSONL SPLIT BASE.nud [OVERLAY.nxl] [--temperature FLOAT]"
+                .into(),
+        );
     }
-    let model = NeuralRanker::from_bytes(&std::fs::read(&args[0])?)?;
+    let bytes = std::fs::read(&args[0])?;
+    let model = if let Some(temperature) = temperature {
+        NeuralRanker::from_bytes_with_temperature(&bytes, temperature)?
+    } else {
+        NeuralRanker::from_bytes(&bytes)?
+    };
     let engine = if let Some(overlay) = args.get(4) {
         Engine::new(WithCommonPredictions::new(nexc_lite::LiteDictionary::open(
             &args[3], overlay,
@@ -95,6 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "model_sha256": hash(&args[0])?, "dataset_sha256":hash(&args[1])?, "dictionary_sha256":hash(&args[3])?,
             "overlay_sha256": args.get(4).map(|p| hash(p)).transpose()?,
             "partition":args[2],"metrics":metrics,"rows":rows,
+            "neural_ranking_temperature":temperature,
             "scope":"Real offline dictionary candidate generation and ranking; batch conversion, warm cache, synthetic context. Not key-by-key Session, phone, power, or general accuracy.",
             "training_during_evaluation":false,"installed":false,
             "host_os":std::env::consts::OS,"host_arch":std::env::consts::ARCH
