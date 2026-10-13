@@ -122,6 +122,27 @@ pub fn convert(
     reading: &str,
     limit: usize,
 ) -> Result<Vec<Candidate>, ConvertError> {
+    convert_with_entered(dictionary, costs, reading, "", limit)
+}
+/// Raw input is used only to identify already entered non-ASCII spans containing
+/// ideographs. Romaji-derived kana is never treated as already converted text.
+pub fn convert_with_entered(
+    dictionary: &(impl DictionarySource + ?Sized),
+    costs: &ConnectionCosts,
+    reading: &str,
+    raw_input: &str,
+    limit: usize,
+) -> Result<Vec<Candidate>, ConvertError> {
+    if raw_input.len() > MAX_INPUT_CHARS * 4 {
+        return Err(ConvertError::InputTooLong);
+    }
+    let entered: Vec<_> = raw_input
+        .split(|c: char| c.is_ascii())
+        .filter(|text| {
+            text.chars()
+                .any(|c| matches!(c as u32, 0x3400..=0x4dbf | 0x4e00..=0x9fff | 0x20000..=0x2fa1f))
+        })
+        .collect();
     if !(1..=MAX_CANDIDATES).contains(&limit) {
         return Err(ConvertError::InvalidLimit);
     }
@@ -186,6 +207,22 @@ pub fn convert(
         }
         // Retain ASCII as a single run rather than interpreting each letter as a token.
         let tail = &reading[boundaries[start]..];
+        // Entered ideographs are not phonetic dictionary keys. Keep their
+        // contiguous non-ASCII span as an edge, including following kana.
+        for text in entered.iter().filter(|text| tail.starts_with(**text)) {
+            let entered_length = text.chars().count();
+            for prefix in &prefixes {
+                append(
+                    &mut beams[start + entered_length],
+                    prefix,
+                    text,
+                    noun,
+                    noun,
+                    6000,
+                    costs,
+                );
+            }
+        }
         if tail.starts_with(|c: char| c.is_ascii_alphabetic()) {
             let length = tail.chars().take_while(|c| c.is_ascii_alphabetic()).count();
             let text = &reading[boundaries[start]..boundaries[start + length]];
@@ -253,5 +290,23 @@ mod tests {
         let model = ConnectionCosts::from_text(&b"1\n0\n"[..]).unwrap();
         assert!(convert(&dict, &model, "あ", 1).is_err());
         assert_eq!(convert(&dict, &model, "😊", 1).unwrap()[0].surface, "😊");
+    }
+    #[test]
+    fn entered_ideograph_spans_remain_available_without_rewriting_kana_input() {
+        let dictionary = nextime_dict::Dictionary::from_tsv("る\t流\tmozc:0:0:10\t100\n").unwrap();
+        let model = ConnectionCosts::from_text(&b"1\n0\n"[..]).unwrap();
+        assert_eq!(
+            convert_with_entered(&dictionary, &model, "調べる", "調べる", 32).unwrap()[0].surface,
+            "調べる"
+        );
+        assert_eq!(
+            convert(&dictionary, &model, "る", 32).unwrap()[0].surface,
+            "流"
+        );
+        assert_eq!(
+            convert_with_entered(&dictionary, &model, "調べるRust", "調べるRust", 32).unwrap()[0]
+                .surface,
+            "調べるRust"
+        );
     }
 }

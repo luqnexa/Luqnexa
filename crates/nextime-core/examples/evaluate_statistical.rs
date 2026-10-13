@@ -71,7 +71,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .candidates);
                 }
                 let reading = engine.normalize_input(input, false);
-                let mut candidates = statistical::convert(source.as_ref(), &costs, &reading, 32)?;
+                let mut candidates = statistical::convert_with_entered(
+                    source.as_ref(),
+                    &costs,
+                    &reading,
+                    input,
+                    32,
+                )?;
                 if mode == 2 {
                     neural
                         // The trainer hashes raw input, just like Engine's neural path.
