@@ -17,12 +17,13 @@ def prepare(dataset, report):
         raise ValueError('only offline training-partition conversions are accepted')
     if report.get('dataset_sha256') != hashlib.sha256(raw).hexdigest():
         raise ValueError('dataset hash mismatch')
-    by_input = {r['input']: r for r in records if r['split'] == 'train'}
+    # One reading can legitimately have opposite references under different contexts.
+    by_input = {(r['input'], r['context'], r['good']): r for r in records if r['split'] == 'train'}
     excluded = {r['input'] for r in records if r['split'] != 'train'}
     pairs = {(r['input'], r['context'], r['good'], r['bad']) for r in records}
     extras = []
     for row in report['rows']:
-        source = by_input.get(row['input'])
+        source = by_input.get((row['input'], row['context'], row['reference']))
         if source is None or row['input'] in excluded:
             raise ValueError('report contains non-training input')
         if row['reference'] != source['good'] or row['context'] != source['context']:

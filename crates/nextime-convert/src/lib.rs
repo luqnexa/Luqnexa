@@ -330,6 +330,28 @@ fn extend(target: &mut Vec<Path>, prefixes: &[Path], surface: &str, score: i64, 
 mod tests {
     use super::*;
     #[test]
+    fn particle_chains_are_not_replaced_with_homophone_nouns_after_a_word() {
+        let dictionary = nextime_dict::Dictionary::from_tsv(
+            "ねこ\t猫\tnoun\t10000\nには\t二羽\tnoun\t20000\nには\tには\tparticle\t1000\nでは\t出羽\tnoun\t20000\nでは\tでは\tparticle\t1000\nのは\t野派\tnoun\t20000\nのは\tのは\tparticle\t1000\n"
+        ).unwrap();
+        for (reading, expected, wrong) in [
+            ("ねこには", "猫には", "猫二羽"),
+            ("ねこでは", "猫では", "猫出羽"),
+            ("ねこのは", "猫のは", "猫野派"),
+        ] {
+            let result = convert(&dictionary, reading, 32).unwrap();
+            assert!(result.iter().any(|c| c.surface == expected));
+            assert!(!result.iter().any(|c| c.surface == wrong));
+        }
+        // Whole dictionary words still keep their registered noun alternatives.
+        assert!(
+            convert(&dictionary, "には", 32)
+                .unwrap()
+                .iter()
+                .any(|c| c.surface == "二羽")
+        );
+    }
+    #[test]
     fn curated_nouns_do_not_bypass_imported_word_constraints() {
         // Curated noun compounds remain supported. Imported arbitrary noun
         // combinations retain their restriction, including after curated nouns.
