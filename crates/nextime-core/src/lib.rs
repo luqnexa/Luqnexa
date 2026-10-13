@@ -502,21 +502,24 @@ impl Engine {
             }
         }
         if !self.is_english_word(input) && result.reading.chars().any(|c| c.is_ascii_lowercase()) {
-            for corrected in nextime_ai::typo_readings(input) {
-                for entry in self
+            let spellings = nextime_ai::typo_readings(input);
+            for chunk in spellings.chunks(128) {
+                let queries: Vec<_> = chunk.iter().map(String::as_str).collect();
+                for matches in self
                     .dictionary
-                    .lookup(&corrected, 4)
+                    .lookup_batch(&queries, 4)
                     .map_err(ConvertError::Dictionary)?
-                    .iter()
                 {
-                    if matches!(entry.part_of_speech.as_str(), "english" | "slang-en")
-                        && !result.candidates.iter().any(|c| c.surface == entry.surface)
-                    {
-                        result.candidates.push(Candidate {
-                            surface: entry.surface.clone(),
-                            score: nextime_ranker::word_score(entry.frequency) - 512,
-                            segments: 1,
-                        });
+                    for entry in &matches {
+                        if matches!(entry.part_of_speech.as_str(), "english" | "slang-en")
+                            && !result.candidates.iter().any(|c| c.surface == entry.surface)
+                        {
+                            result.candidates.push(Candidate {
+                                surface: entry.surface.clone(),
+                                score: nextime_ranker::word_score(entry.frequency) - 512,
+                                segments: 1,
+                            });
+                        }
                     }
                 }
             }

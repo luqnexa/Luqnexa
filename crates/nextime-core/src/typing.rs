@@ -35,20 +35,23 @@ impl Engine {
                 break;
             }
             let mut entries = Vec::new();
-            for spelling in nextime_ai::typo_readings(&input[..end]) {
-                for entry in self
+            let spellings = nextime_ai::typo_readings(&input[..end]);
+            for chunk in spellings.chunks(128) {
+                let queries: Vec<_> = chunk.iter().map(String::as_str).collect();
+                for matches in self
                     .dictionary
-                    .lookup(&spelling, 4)
+                    .lookup_batch(&queries, 4)
                     .map_err(ConvertError::Dictionary)?
-                    .iter()
                 {
-                    if matches!(entry.part_of_speech.as_str(), "english" | "slang-en")
-                        && entry.surface.is_ascii()
-                        && !entries
-                            .iter()
-                            .any(|old: &crate::Entry| old.surface == entry.surface)
-                    {
-                        entries.push(entry.clone());
+                    for entry in &matches {
+                        if matches!(entry.part_of_speech.as_str(), "english" | "slang-en")
+                            && entry.surface.is_ascii()
+                            && !entries
+                                .iter()
+                                .any(|old: &crate::Entry| old.surface == entry.surface)
+                        {
+                            entries.push(entry.clone());
+                        }
                     }
                 }
             }

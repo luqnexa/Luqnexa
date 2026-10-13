@@ -204,11 +204,21 @@ pub fn convert(
             );
             continue;
         }
-        for end in start + 1..=(start + dictionary.max_reading_chars()).min(count) {
+        let ends = start + 1..=(start + dictionary.max_reading_chars()).min(count);
+        let slices: Vec<_> = ends
+            .clone()
+            .map(|end| &reading[boundaries[start]..boundaries[end]])
+            .collect();
+        let batches = dictionary
+            .lookup_batch(&slices, MAX_CANDIDATES)
+            .map_err(ConvertError::Dictionary)?;
+        if batches.len() != slices.len() {
+            return Err(ConvertError::Dictionary(LookupError(
+                "invalid batch result length".into(),
+            )));
+        }
+        for (end, matches) in ends.zip(batches) {
             let slice = &reading[boundaries[start]..boundaries[end]];
-            let matches = dictionary
-                .lookup(slice, MAX_CANDIDATES)
-                .map_err(ConvertError::Dictionary)?;
             let negative_predicate = start > 0
                 && slice.ends_with("ない")
                 && matches
