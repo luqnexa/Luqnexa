@@ -126,8 +126,8 @@ int wmain(int argc,wchar_t** argv) {
             ok(manager->SetFocus(document.Get()),"focus");
             auto key=[&](UINT vk,bool expected=true) { BOOL eaten=FALSE; ok(keys->OnKeyDown(context.Get(),vk,0,&eaten),"key event"); check((eaten!=FALSE)==expected,"key handled"); };
             key(VK_RETURN,false);
-            key(VK_F9); key(VK_F9);
-            key(VK_F7); key(VK_F7);
+            key(VK_F9,false); key(VK_F9,false);
+            key(VK_F7,false); key(VK_F7,false);
             store->set_readonly(true); key('A',false); check(store->value.empty(),"readonly"); store->set_readonly(false);
             store->reject_lock=true; key('H',false); check(store->value.empty(),"lock refusal"); store->reject_lock=false;
             for(UINT vk : {'H','A','S','H','I'}) key(vk);
@@ -135,7 +135,7 @@ int wmain(int argc,wchar_t** argv) {
             key(VK_DOWN); check(store->value==L"箸","next candidate"); key(VK_RETURN); check(store->value==L"箸","explicit commit");
             for(UINT vk : {'H','A','S','H','I'}) key(vk);
             key(VK_SPACE); check(store->value==L"箸箸","learned candidate");
-            key(VK_ESCAPE); key(VK_F8);
+            key(VK_ESCAPE); key(VK_F8,false);
             key('A'); check(store->value==L"箸あ","next composition"); key(VK_ESCAPE); check(store->value==L"箸","cancel");
             key('N'); check(store->value==L"箸n","pending n"); key(VK_BACK); check(store->value==L"箸","backspace");
             for(UINT vk : {'O','M','G'}) key(vk);
@@ -176,9 +176,8 @@ int wmain(int argc,wchar_t** argv) {
             }
             std::vector<double> timings;
             for(int i=0;i<1100;++i) {
-                // Same initial personal/context state for each timed sample.
-                // The learning and clearing behavior is tested above.
-                key(VK_F8);
+                // Removed AI shortcuts pass through without changing composition.
+                key(VK_F8,false);
                 auto start=std::chrono::steady_clock::now();
                 for(UINT vk : {'H','A','S','H','I'}) key(vk);
                 key(VK_SPACE); key(VK_DOWN); key(VK_RETURN);
