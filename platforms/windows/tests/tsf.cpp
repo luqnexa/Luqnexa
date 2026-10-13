@@ -134,7 +134,7 @@ int wmain(int argc,wchar_t** argv) {
             check(store->value==L"はし","preedit"); key(VK_SPACE); check(store->value==L"橋","first candidate");
             key(VK_DOWN); check(store->value==L"箸","next candidate"); key(VK_RETURN); check(store->value==L"箸","explicit commit");
             for(UINT vk : {'H','A','S','H','I'}) key(vk);
-            key(VK_SPACE); check(store->value==L"箸箸","learned candidate");
+            key(VK_SPACE); check(store->value==L"箸橋","selection does not train the removed AI");
             key(VK_ESCAPE); key(VK_F8,false);
             key('A'); check(store->value==L"箸あ","next composition"); key(VK_ESCAPE); check(store->value==L"箸","cancel");
             key('N'); check(store->value==L"箸n","pending n"); key(VK_BACK); check(store->value==L"箸","backspace");
