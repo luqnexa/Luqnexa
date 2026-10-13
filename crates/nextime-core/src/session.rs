@@ -12,6 +12,8 @@ pub enum Key<'a> {
     Enter,
     Cancel,
     Literal,
+    FullWidth,
+    HalfWidth,
     ToggleMode,
     ToggleAi,
     ClearContext,
@@ -341,6 +343,29 @@ impl Session {
                 }];
                 self.selected = 0;
                 self.selecting = true;
+            }
+            Key::FullWidth | Key::HalfWidth => {
+                let source = if self.selecting {
+                    self.display()
+                } else {
+                    &self.raw
+                };
+                let surface = if key == Key::FullWidth {
+                    crate::width::full_width(source)
+                } else {
+                    crate::width::half_width(source)
+                };
+                self.candidates = vec![Candidate {
+                    surface,
+                    score: 0,
+                    segments: 1,
+                }];
+                self.selected = 0;
+                self.selecting = true;
+                self.learn_selection = false;
+                if let Some(llm) = self.local_ai.as_mut() {
+                    llm.cancel();
+                }
             }
             Key::Text(_) => unreachable!(),
             Key::Convert => unreachable!(),

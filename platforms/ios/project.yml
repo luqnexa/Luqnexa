@@ -24,6 +24,8 @@ targets:
     dependencies:
       - framework: build/libnextime_ffi.a
         embed: false
+      - target: LuqnexaKeyboard
+        embed: true
     info:
       path: build/Info.plist
       properties:
@@ -33,6 +35,30 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.luqnexa.probe
+        TARGETED_DEVICE_FAMILY: "1,2"
+  LuqnexaKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard
+    dependencies:
+      - framework: build/libnextime_ffi.a
+        embed: false
+    info:
+      path: build/Keyboard-Info.plist
+      properties:
+        CFBundleDisplayName: Luqnexa
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: true
+            PrimaryLanguage: ja-JP
+            RequestsOpenAccess: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.luqnexa.probe.keyboard
+        APPLICATION_EXTENSION_API_ONLY: YES
         TARGETED_DEVICE_FAMILY: "1,2"
 schemes:
   LuqnexaProbe:

@@ -13,6 +13,10 @@ struct ProbeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Rust製AI・実験用") .font(.title2)
+                    Button("キーボード設定を開く") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }.buttonStyle(.bordered)
+                    Text("設定 → 一般 → キーボード → キーボード → 新しいキーボードを追加でLuqnexaを選び、入力時に🌐で切り替えます。フルアクセスは不要です。")
                     Text("約162KiBの候補順位モデル。辞書を含む変換精度・5ms目標の達成を証明するアプリではありません。入力履歴の取得、通信、自動学習は行いません。")
                     Button(running ? "測定中…" : "端末内で速度を測る") { measure() }
                         .buttonStyle(.borderedProminent).disabled(running)

@@ -41,7 +41,7 @@ public:
         if(!count) { hide(); return S_OK; }
         rows_.clear();
         uint32_t start=selected==UINT32_MAX ? 0 : (selected/8)*8;
-        rows_.push_back(session.text(NEXTIME_MODE)+L" / "+session.text(NEXTIME_AI_MODE)+L" F9 / F8:消去 / F10:英字 / F12:日英");
+        rows_.push_back(session.text(NEXTIME_MODE)+L" / "+session.text(NEXTIME_AI_MODE)+L" F9 / F6:全角 Shift+F6:半角 / F10:英字 / F12:日英");
         rows_.push_back(session.text(NEXTIME_TRAINING_MODE)+L" F7:文章学習の切替（端末内）");
         auto local=session.text(NEXTIME_LOCAL_AI_MODE);
         rows_.push_back(local==L"local:pending" ? L"文章理解AI:端末内 / 処理中" :

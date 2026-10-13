@@ -30,7 +30,8 @@ struct KeyAction { uint32_t key=0; std::string text; };
 inline KeyAction map_key(UINT vk, bool ctrl, bool alt, bool win, bool shift, bool composing, bool candidates) {
     if(ctrl || alt || win) return {};
     if(vk==VK_F12 || vk==VK_KANJI) return {NEXTIME_TOGGLE_MODE,{}};
-    if(vk==VK_F10 && composing) return {NEXTIME_LITERAL,{}};
+    if(vk==VK_F10 && composing) return {static_cast<uint32_t>(shift ? NEXTIME_FULL_WIDTH : NEXTIME_LITERAL),{}};
+    if(vk==VK_F6 && composing) return {static_cast<uint32_t>(shift ? NEXTIME_HALF_WIDTH : NEXTIME_FULL_WIDTH),{}};
     if(vk==VK_F9) return {NEXTIME_TOGGLE_AI,{}};
     if(vk==VK_F8) return {NEXTIME_CLEAR_LEARNING,{}};
     if(vk==VK_F7) return {NEXTIME_TOGGLE_TRAINING,{}};

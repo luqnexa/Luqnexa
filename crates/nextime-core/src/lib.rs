@@ -15,6 +15,7 @@ pub use nextime_dict::{
 };
 pub use nextime_ranker::Candidate;
 mod session;
+pub mod width;
 #[cfg(feature = "mobile-neural")]
 pub use nextime_ai::mobile::NeuralRanker;
 pub use session::{Key, Outcome, Session, SessionError};

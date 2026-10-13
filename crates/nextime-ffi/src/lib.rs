@@ -181,6 +181,8 @@ pub unsafe extern "C" fn nextime_session_event(
             13 => Key::ClearLearning,
             14 => Key::ToggleTraining,
             15 => Key::PollAi,
+            16 => Key::FullWidth,
+            17 => Key::HalfWidth,
             10 => Key::Space,
             _ => return Err(INVALID_ARGUMENT),
         };
