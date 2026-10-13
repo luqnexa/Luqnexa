@@ -9,6 +9,7 @@ settings:
     CODE_SIGNING_ALLOWED: NO
     SWIFT_OBJC_BRIDGING_HEADER: "$(PROJECT_DIR)/Bridge.h"
     HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/../../crates/nextime-ffi/include"
+    LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/build"
     OTHER_LDFLAGS: ["$(inherited)", "-liconv", "-lresolv"]
 targets:
   LuqnexaProbe:
