@@ -154,6 +154,9 @@ int wmain(int argc,wchar_t** argv) {
             check(!map_key('A',false,true,false,false,false,false).key,"Alt shortcut");
             check(!map_key('A',false,false,true,false,false,false).key,"Windows shortcut");
             check(map_key(VK_SPACE,false,false,false,true,true,true).key==NEXTIME_PREVIOUS,"Shift Space");
+            check(map_key(VK_F6,false,false,false,false,true,false).key==NEXTIME_FULL_WIDTH,"full width shortcut");
+            check(map_key(VK_F6,false,false,false,true,true,false).key==NEXTIME_HALF_WIDTH,"half width shortcut");
+            check(map_key(VK_F10,false,false,false,true,true,false).key==NEXTIME_FULL_WIDTH,"full width Latin shortcut");
             for(UINT vk='A';vk<='Z';++vk) {
                 check(map_key(vk,false,false,false,true,false,false).text==std::string(1,static_cast<char>(vk)),"Shift uppercase mapping");
                 check(map_key(vk,false,false,false,false,false,false).text==std::string(1,static_cast<char>('a'+vk-'A')),"plain lowercase mapping");

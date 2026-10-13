@@ -43,7 +43,7 @@ jobs:
           zip -qr LuqnexaProbe-unsigned.ipa Payload
           shasum -a 256 LuqnexaProbe-unsigned.ipa > SHA256SUMS.txt
       - name: Verify IPA architecture and model integrity
-        run: python3 scripts/verify-ios-probe.py platforms/ios/build/LuqnexaProbe-unsigned.ipa > platforms/ios/build/verification.json
+        run: python3 scripts/verify-ios-probe.py platforms/ios/build/LuqnexaProbe-unsigned.ipa --require-keyboard > platforms/ios/build/verification.json
       - uses: actions/upload-artifact@v4
         with:
           name: LuqnexaProbe-unsigned-iphone

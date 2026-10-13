@@ -101,7 +101,7 @@ fn reported_sentences_convert_without_qwen_and_commit_only_on_enter() {
 #[test]
 fn keyboard_errors_keep_literal_and_preserve_recognized_words() {
     let engine = Engine::bundled();
-    for input in ["pythpn", "pyhton"] {
+    for input in ["pythpn", "pyhton", "pythonn"] {
         let result = engine
             .convert_with_context(input, "コードを書きます。", 8)
             .unwrap();
