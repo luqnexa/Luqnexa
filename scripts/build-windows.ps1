@@ -14,9 +14,6 @@ try {
     New-Item -ItemType Directory -Force -Path $output | Out-Null
     Copy-Item -LiteralPath (Join-Path $metadata.target_directory 'release/nextime_ffi.dll') -Destination $output
     Copy-Item -LiteralPath 'LICENSE' -Destination $output
-    Copy-Item -LiteralPath 'models/TATOEBA-NOTICES.txt','models/TATOEBA-AUTHORS.tsv','models/context-training.json' -Destination $output
-    Copy-Item -LiteralPath 'models/LITERATURE-NOTICES.txt','models/literature-training.json' -Destination $output
-    Copy-Item -LiteralPath 'models/RUST-DEPENDENCIES-NOTICES.txt' -Destination $output
     if (Test-Path -LiteralPath 'dictionaries/mozc-ja.tsv') {
         $dictionaryHash = (Get-FileHash -LiteralPath 'dictionaries/mozc-ja.tsv').Hash.ToLowerInvariant()
         $cachedDictionary = Join-Path $output "base-$dictionaryHash.nud"

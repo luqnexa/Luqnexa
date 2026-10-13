@@ -15,10 +15,9 @@ pub use nextime_dict::{
 };
 pub use nextime_ranker::Candidate;
 mod session;
+mod spelling;
 mod typing;
 pub mod width;
-#[cfg(feature = "mobile-neural")]
-pub use nextime_ai::mobile::NeuralRanker;
 pub use session::{Key, Outcome, Session, SessionError};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,40 +32,6 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Explicit Rust neural conversion. The caller supplies an already loaded,
-    /// provenance-checked model and consented context. No bundled LLM is called.
-    #[cfg(feature = "mobile-neural")]
-    pub fn convert_with_neural(
-        &self,
-        input: &str,
-        context: &str,
-        model: &NeuralRanker,
-        limit: usize,
-    ) -> Result<Conversion, ConvertError> {
-        if !(1..=MAX_CANDIDATES).contains(&limit) {
-            return Err(ConvertError::InvalidLimit);
-        }
-        // Keep the whole bounded candidate pool until the learned reranking.
-        let mut result = self.conversion_candidates(input, MAX_CANDIDATES)?;
-        // Explicit research path: make attested case options available to this model.
-        // Preserve standalone Latin input and explicit Shift/case-sensitive identifiers.
-        if !self.is_english_word(input) && !input.chars().any(|c| c.is_ascii_uppercase()) {
-            nextime_ai::dictionary_case_candidates(&mut result.candidates);
-        }
-        let literal = result
-            .candidates
-            .iter()
-            .find(|c| c.surface == result.reading)
-            .cloned();
-        nextime_ranker::rank(&mut result.candidates, MAX_CANDIDATES);
-        Self::restore_literal(&mut result, literal.clone(), MAX_CANDIDATES);
-        model
-            .rerank(input, context, &mut result.candidates, limit)
-            .map_err(|_| ConvertError::InvalidLimit)?;
-        Self::restore_literal(&mut result, literal, limit);
-        Ok(result)
-    }
-
     /// Conversion-time alternatives only; live preedit and literal input stay intact.
     fn corrected_reading(&self, input: &str) -> String {
         let words: Vec<_> = input.split(' ').collect();
@@ -80,7 +45,7 @@ impl Engine {
         } else {
             input.to_owned()
         };
-        let aliases: Vec<_> = include_str!("../../../models/input-aliases.tsv")
+        let aliases: Vec<_> = include_str!("../../../dictionaries/input-aliases.tsv")
             .lines()
             .filter(|s| !s.starts_with('#'))
             .filter_map(|s| s.split_once('\t'))
@@ -388,37 +353,19 @@ impl Engine {
         })
     }
 
+    /// Compatibility API: context is ignored after AI removal.
     pub fn convert_with_context(
         &self,
         input: &str,
-        context: &str,
+        _context: &str,
         limit: usize,
     ) -> Result<Conversion, ConvertError> {
         if !(1..=MAX_CANDIDATES).contains(&limit) {
             return Err(ConvertError::InvalidLimit);
         }
         let mut result = self.conversion_candidates(input, MAX_CANDIDATES)?;
-        let literal = result
-            .candidates
-            .iter()
-            .find(|c| c.surface == result.reading)
-            .cloned();
-        nextime_ai::Model::bundled().rerank(context, &mut result.candidates, limit);
-        Self::restore_literal(&mut result, literal, limit);
+        nextime_ranker::rank(&mut result.candidates, limit);
         Ok(result)
-    }
-
-    fn restore_literal(result: &mut Conversion, literal: Option<Candidate>, limit: usize) {
-        if let Some(literal) = literal.filter(|_| limit > 1) {
-            if !result
-                .candidates
-                .iter()
-                .any(|c| c.surface == literal.surface)
-            {
-                result.candidates.truncate(limit - 1);
-                result.candidates.push(literal);
-            }
-        }
     }
 
     // Shared lexical generation only. Does not apply old model weights or start a backend.
@@ -436,7 +383,7 @@ impl Engine {
             return Err(ConvertError::InputTooLong);
         }
         let corrected = self.corrected_reading(input);
-        let reviewed = include_str!("../../../models/input-corrections.tsv")
+        let reviewed = include_str!("../../../dictionaries/input-corrections.tsv")
             .lines()
             .filter_map(|s| s.split_once('\t'))
             .any(|(from, _)| corrected == from);
@@ -493,7 +440,7 @@ impl Engine {
                 }
             }
         }
-        for (from, to) in include_str!("../../../models/input-corrections.tsv")
+        for (from, to) in include_str!("../../../dictionaries/input-corrections.tsv")
             .lines()
             .filter(|s| !s.starts_with('#'))
             .filter_map(|s| s.split_once('\t'))
@@ -507,7 +454,7 @@ impl Engine {
             }
         }
         if !self.is_english_word(input) && result.reading.chars().any(|c| c.is_ascii_lowercase()) {
-            let spellings = nextime_ai::typo_readings(input);
+            let spellings = crate::spelling::typo_readings(input);
             for chunk in spellings.chunks(128) {
                 let queries: Vec<_> = chunk.iter().map(String::as_str).collect();
                 for matches in self

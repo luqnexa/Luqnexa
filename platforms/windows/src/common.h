@@ -32,9 +32,6 @@ inline KeyAction map_key(UINT vk, bool ctrl, bool alt, bool win, bool shift, boo
     if(vk==VK_F12 || vk==VK_KANJI) return {NEXTIME_TOGGLE_MODE,{}};
     if(vk==VK_F10 && composing) return {static_cast<uint32_t>(shift ? NEXTIME_FULL_WIDTH : NEXTIME_LITERAL),{}};
     if(vk==VK_F6 && composing) return {static_cast<uint32_t>(shift ? NEXTIME_HALF_WIDTH : NEXTIME_FULL_WIDTH),{}};
-    if(vk==VK_F9) return {NEXTIME_TOGGLE_AI,{}};
-    if(vk==VK_F8) return {NEXTIME_CLEAR_LEARNING,{}};
-    if(vk==VK_F7) return {NEXTIME_TOGGLE_TRAINING,{}};
     if(vk>='A' && vk<='Z') return {NEXTIME_TEXT,std::string(1,static_cast<char>(shift ? vk : 'a'+vk-'A'))};
     if(vk>='0' && vk<='9') return {NEXTIME_TEXT,std::string(1,static_cast<char>(vk))};
     if(vk>=VK_NUMPAD0 && vk<=VK_NUMPAD9) return {NEXTIME_TEXT,std::string(1,static_cast<char>('0'+vk-VK_NUMPAD0))};

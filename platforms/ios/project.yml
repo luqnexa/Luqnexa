@@ -17,10 +17,6 @@ targets:
     platform: iOS
     sources:
       - path: App
-      - path: Resources/model.lqml
-        buildPhase: resources
-      - path: Resources/training-report.json
-        buildPhase: resources
     dependencies:
       - framework: build/libnextime_ffi.a
         embed: false

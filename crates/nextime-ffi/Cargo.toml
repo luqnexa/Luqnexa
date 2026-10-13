@@ -5,16 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[features]
-mobile-neural = ["nextime-core/mobile-neural", "dep:luqnexa-ml"]
-
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 nextime-core.workspace = true
 nexc-lite.workspace = true
-luqnexa-ml = { workspace = true, optional = true }
 
 [dev-dependencies]
 nexc-max.workspace = true

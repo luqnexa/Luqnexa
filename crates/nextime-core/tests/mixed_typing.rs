@@ -42,4 +42,39 @@ fn dictionary_verified_prefix_typo_keeps_japanese_suffix_and_literal() {
                 .any(|c| c.surface == "Harborで作る")
         );
     }
+    for input in ["haror", "harorodetsukuru"] {
+        let result = engine.convert_with_context(input, "", 32).unwrap();
+        // The second input has more than one error and must not be invented.
+        if input == "haror" {
+            assert!(result.candidates.iter().any(|c| c.surface == "Harbor"));
+            assert!(
+                result
+                    .candidates
+                    .iter()
+                    .any(|c| c.surface == result.reading)
+            );
+        } else {
+            assert!(
+                !result
+                    .candidates
+                    .iter()
+                    .any(|c| c.surface == "Harborで作る")
+            );
+        }
+    }
+    let result = engine
+        .convert_with_context("harordetsukuru", "", 32)
+        .unwrap();
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == "Harborで作る")
+    );
+    assert!(
+        result
+            .candidates
+            .iter()
+            .any(|c| c.surface == result.reading)
+    );
 }

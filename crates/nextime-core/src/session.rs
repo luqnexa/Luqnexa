@@ -63,14 +63,6 @@ pub struct Session {
     selected: usize,
     selecting: bool,
     english: bool,
-    ai: bool,
-    context: String,
-    personal: nextime_ai::PersonalModel,
-    learn_selection: bool,
-    text_learning: bool,
-    text_model: nextime_ai::Model,
-    local_ai: Option<nextime_ai::LocalLlm>,
-    local_ai_error: Option<nextime_ai::LocalConfigError>,
 }
 
 impl Session {
@@ -78,8 +70,6 @@ impl Session {
         if !(1..=MAX_CANDIDATES).contains(&limit) {
             return Err(ConvertError::InvalidLimit.into());
         }
-        let local_ai = Self::optional_llm();
-        let local_ai_error = local_ai.as_ref().err().copied();
         Ok(Self {
             engine,
             limit,
@@ -89,14 +79,6 @@ impl Session {
             selected: 0,
             selecting: false,
             english: false,
-            ai: true,
-            context: String::new(),
-            personal: nextime_ai::PersonalModel::default(),
-            learn_selection: false,
-            text_learning: true,
-            text_model: nextime_ai::Model::default(),
-            local_ai: local_ai.ok(),
-            local_ai_error,
         })
     }
     pub fn raw(&self) -> &str {
@@ -111,13 +93,7 @@ impl Session {
     /// Read-only score diagnostic. Only selected Japanese conversions have the
     /// native model contribution; explicit English input remains literal.
     pub fn native_candidate_bonus(&self, index: usize) -> Option<i64> {
-        self.candidates.get(index).map(|candidate| {
-            if self.ai && self.selecting && !self.english {
-                nextime_ai::Model::bundled().native_bonus(&self.context, &candidate.surface)
-            } else {
-                0
-            }
-        })
+        self.candidates.get(index).map(|_| 0)
     }
     pub fn selected_index(&self) -> Option<usize> {
         if self.candidates.is_empty() || !self.selecting {
@@ -137,60 +113,15 @@ impl Session {
     }
 
     pub fn event(&mut self, key: Key<'_>) -> Result<Outcome, SessionError> {
-        if key == Key::PollAi {
-            let pending = self.local_ai_pending();
-            let changed = self.ai
-                && self.selecting
-                && self.selected == 0
-                && self
-                    .local_ai
-                    .as_mut()
-                    .is_some_and(|llm| llm.poll(&mut self.candidates));
-            return Ok(Outcome {
-                handled: changed || (pending && !self.local_ai_pending()),
-                committed: None,
-            });
-        }
-        if let Some(llm) = self.local_ai.as_mut() {
-            llm.cancel();
-        }
-        if key == Key::ToggleTraining {
-            self.text_learning = !self.text_learning;
-            self.clear_context();
-            self.refresh();
-            return Ok(Outcome {
-                handled: true,
-                committed: None,
-            });
-        }
-        if key == Key::ClearLearning {
-            self.personal.clear();
-            self.text_model = nextime_ai::Model::default();
-            self.clear_context();
-            self.refresh();
-            return Ok(Outcome {
-                handled: true,
-                committed: None,
-            });
-        }
-        if key == Key::ClearContext {
-            self.clear_context();
-            return Ok(Outcome {
-                handled: true,
-                committed: None,
-            });
-        }
-        if key == Key::ToggleAi {
-            self.ai = !self.ai;
-            if self.ai {
-                self.refresh_local_ai();
-            }
-            self.context.clear();
-            self.refresh();
-            return Ok(Outcome {
-                handled: true,
-                committed: None,
-            });
+        if matches!(
+            key,
+            Key::PollAi
+                | Key::ToggleAi
+                | Key::ToggleTraining
+                | Key::ClearLearning
+                | Key::ClearContext
+        ) {
+            return Ok(Outcome::default());
         }
         if key == Key::ToggleMode {
             self.english = !self.english;
@@ -208,7 +139,6 @@ impl Session {
                     self.raw.clone()
                 };
                 committed.push(' ');
-                self.remember(&committed);
                 self.clear();
                 return Ok(Outcome {
                     handled: true,
@@ -224,9 +154,7 @@ impl Session {
             if self.raw.len().saturating_add(text.len()) > MAX_INPUT_CHARS * 4 {
                 return Err(ConvertError::InputTooLong.into());
             }
-            if self.ai && self.raw.is_empty() {
-                self.refresh_local_ai();
-            }
+
             let next = format!("{}{text}", self.raw);
             let preedit = if self.english || self.engine.is_english_word(&next) {
                 next.clone()
@@ -257,9 +185,7 @@ impl Session {
                 // The local helper can start or rotate its authentication token
                 // after this input session was created. Refresh on conversion,
                 // never on every typed character or timer tick.
-                if self.ai {
-                    self.refresh_local_ai();
-                }
+
                 self.candidates = if self.english {
                     vec![Candidate {
                         surface: self.raw.clone(),
@@ -267,29 +193,12 @@ impl Session {
                         segments: 1,
                     }]
                 } else {
-                    if self.ai {
-                        self.engine
-                            .convert_with_context(&self.raw, &self.context, self.limit)?
-                            .candidates
-                    } else {
-                        self.engine.convert(&self.raw, self.limit)?.candidates
-                    }
+                    self.engine
+                        .convert_with_context(&self.raw, "", self.limit)?
+                        .candidates
                 };
-                self.rerank_personal();
                 self.selected = 0;
                 self.selecting = true;
-                self.learn_selection = !self.english;
-                if self.ai {
-                    if let Some(llm) = self.local_ai.as_mut() {
-                        nextime_ai::case_candidates(&mut self.candidates, self.limit);
-                        let reading = if self.english {
-                            self.raw.clone()
-                        } else {
-                            self.engine.normalize_input(&self.raw, false)
-                        };
-                        llm.begin(&self.context, &reading, &self.candidates);
-                    }
-                }
             }
             Key::Next | Key::Previous if !self.selecting && !self.candidates.is_empty() => {
                 self.selected = if key == Key::Previous {
@@ -314,19 +223,7 @@ impl Session {
                 } else {
                     self.engine.normalize_input(&self.raw, false)
                 };
-                if self.ai
-                    && self.selecting
-                    && self.learn_selection
-                    && self
-                        .candidates
-                        .get(self.selected)
-                        .is_some_and(|c| c.segments == 1)
-                {
-                    let reading = self.engine.normalize_input(&self.raw, false);
-                    self.personal
-                        .learn_with_context(&reading, &committed, &self.context);
-                }
-                self.remember(&committed);
+
                 self.clear();
                 return Ok(Outcome {
                     handled: true,
@@ -335,7 +232,6 @@ impl Session {
             }
             Key::Cancel => self.clear(),
             Key::Literal => {
-                self.learn_selection = false;
                 self.candidates = vec![Candidate {
                     surface: self.raw.clone(),
                     score: 0,
@@ -362,10 +258,6 @@ impl Session {
                 }];
                 self.selected = 0;
                 self.selecting = true;
-                self.learn_selection = false;
-                if let Some(llm) = self.local_ai.as_mut() {
-                    llm.cancel();
-                }
             }
             Key::Text(_) => unreachable!(),
             Key::Convert => unreachable!(),
@@ -389,100 +281,30 @@ impl Session {
         self.candidates.clear();
         self.selected = 0;
         self.selecting = false;
-        self.learn_selection = false;
     }
+    // Retained C ABI queries always report disabled; no AI or learning code remains.
     pub fn ai_enabled(&self) -> bool {
-        self.ai
+        false
     }
     pub fn local_ai_pending(&self) -> bool {
-        self.ai
-            && self.selecting
-            && self.selected == 0
-            && self
-                .local_ai
-                .as_ref()
-                .is_some_and(nextime_ai::LocalLlm::pending)
+        false
     }
     pub fn local_ai_enabled(&self) -> bool {
-        self.ai && self.local_ai.is_some()
+        false
     }
     pub fn local_ai_status(&self) -> &'static str {
-        if !self.ai {
-            "local:off"
-        } else if std::env::var("LUQNEXA_AI_BACKEND").as_deref() != Ok("qwen") {
-            "local:original"
-        } else if self.local_ai_pending() {
-            "local:pending"
-        } else if self.local_ai.is_some() {
-            "local:on"
-        } else {
-            self.local_ai_error
-                .map_or("local:off", nextime_ai::LocalConfigError::status)
-        }
-    }
-    fn refresh_local_ai(&mut self) {
-        let configured = Self::optional_llm();
-        self.local_ai_error = configured.as_ref().err().copied();
-        self.local_ai = configured.ok();
-    }
-    fn optional_llm() -> Result<nextime_ai::LocalLlm, nextime_ai::LocalConfigError> {
-        // Native inference has no settings, helper, sockets or credentials.
-        if std::env::var("LUQNEXA_AI_BACKEND").as_deref() == Ok("qwen") {
-            nextime_ai::LocalLlm::try_configured()
-        } else {
-            Err(nextime_ai::LocalConfigError::Disabled)
-        }
+        "local:removed"
     }
     pub fn learned_entries(&self) -> usize {
-        self.personal.entry_count()
+        0
     }
     pub fn text_learning_enabled(&self) -> bool {
-        self.text_learning
+        false
     }
     pub fn learned_text_features(&self) -> usize {
-        self.text_model.feature_count()
+        0
     }
-    fn rerank_personal(&mut self) {
-        if self.ai {
-            if !self.english {
-                let reading = self.engine.normalize_input(&self.raw, false);
-                self.personal.rerank_with_context(
-                    &reading,
-                    &self.context,
-                    &mut self.candidates,
-                    self.limit,
-                );
-            }
-            if self.text_learning {
-                self.text_model
-                    .rerank_online(&self.context, &mut self.candidates, self.limit);
-            }
-        }
-    }
-    pub fn clear_context(&mut self) {
-        self.context.clear();
-        if let Some(llm) = self.local_ai.as_mut() {
-            llm.cancel();
-        }
-    }
-    fn remember(&mut self, text: &str) {
-        if !self.ai {
-            return;
-        }
-        if self.text_learning {
-            self.text_model.learn_confirmed(&self.context, text);
-        }
-        self.context.push_str(text);
-        let chars = self.context.chars().count();
-        if chars > 96 {
-            let start = self
-                .context
-                .char_indices()
-                .nth(chars - 96)
-                .map_or(0, |(i, _)| i);
-            self.context.drain(..start);
-        }
-    }
+    pub fn clear_context(&mut self) {}
     pub fn english_mode(&self) -> bool {
         self.english
     }
@@ -494,19 +316,11 @@ impl Session {
         };
         self.candidates = self
             .engine
-            .predict(
-                &self.raw,
-                if self.ai { 32 } else { self.limit },
-                self.english,
-            )
+            .predict(&self.raw, self.limit, self.english)
             .unwrap_or_default();
-        if self.ai {
-            nextime_ai::Model::bundled().rerank(&self.context, &mut self.candidates, self.limit);
-        }
-        self.rerank_personal();
+
         self.selected = 0;
         self.selecting = false;
-        self.learn_selection = false;
     }
 }
 
@@ -516,86 +330,7 @@ mod tests {
     fn session() -> Session {
         Session::new(Engine::bundled(), 8).unwrap()
     }
-    #[test]
-    fn human_character_input_learns_final_text_only() {
-        let mut s = session();
-        assert!(s.text_learning_enabled());
-        s.event(Key::Text("打ち間違い")).unwrap();
-        for _ in 0..5 {
-            s.event(Key::Backspace).unwrap();
-        }
-        for c in "食事に箸を使います。".chars() {
-            s.event(Key::Text(&c.to_string())).unwrap();
-            assert_eq!(s.learned_text_features(), 0);
-        }
-        let committed = s.event(Key::Enter).unwrap().committed.unwrap();
-        assert_eq!(committed, "食事に箸を使います。");
-        assert!(s.learned_text_features() > 0);
-        assert!(s.text_model.score("食事に", "箸") > s.text_model.score("食事に", "橋"));
-        assert_eq!(s.text_model.score("", "打ち間違い"), 0);
-        let before = s.learned_text_features();
-        s.event(Key::Text("取り消した文章")).unwrap();
-        s.event(Key::Cancel).unwrap();
-        assert_eq!(s.learned_text_features(), before);
-        s.event(Key::ToggleTraining).unwrap();
-        s.event(Key::Text("新しい文章")).unwrap();
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_text_features(), before);
-        s.event(Key::ClearLearning).unwrap();
-        assert_eq!(s.learned_text_features(), 0);
-        assert!(!s.text_learning_enabled());
-        s.event(Key::ToggleTraining).unwrap();
-        s.event(Key::ToggleMode).unwrap();
-        for c in "hello".chars() {
-            s.event(Key::Text(&c.to_string())).unwrap();
-        }
-        s.event(Key::Space).unwrap();
-        assert!(s.learned_text_features() > 0);
-        s.event(Key::ClearLearning).unwrap();
-        s.event(Key::ToggleAi).unwrap();
-        s.event(Key::Text("doNotLearn")).unwrap();
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_text_features(), 0);
-    }
-    #[test]
-    fn learns_explicit_conversion_only_and_can_forget() {
-        let mut s = session();
-        s.event(Key::Text("hashi")).unwrap();
-        s.event(Key::Space).unwrap();
-        for _ in 0..s.candidates.len() {
-            if s.display() == "箸" {
-                break;
-            }
-            s.event(Key::Next).unwrap();
-        }
-        assert_eq!(s.display(), "箸");
-        assert_eq!(s.learned_entries(), 0);
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_entries(), 1);
-        s.clear_context();
-        s.event(Key::Text("はし")).unwrap();
-        s.event(Key::Space).unwrap();
-        assert_eq!(s.display(), "箸");
-        s.event(Key::Cancel).unwrap();
-        s.event(Key::ClearLearning).unwrap();
-        assert_eq!(s.learned_entries(), 0);
-        s.event(Key::Text("hashi")).unwrap();
-        s.event(Key::Space).unwrap();
-        assert_eq!(s.display(), "橋");
-        s.event(Key::ToggleAi).unwrap();
-        s.event(Key::Space).unwrap();
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_entries(), 0);
-        s.event(Key::ToggleAi).unwrap();
-        s.event(Key::Text("hashi")).unwrap();
-        s.event(Key::Literal).unwrap();
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_entries(), 0);
-        s.event(Key::Text("yoroshi")).unwrap();
-        s.event(Key::Next).unwrap();
-        s.event(Key::Enter).unwrap();
-        assert_eq!(s.learned_entries(), 0);
-    }
+
     #[test]
     fn english_slang_literal_and_space() {
         let mut s = session();
@@ -704,26 +439,6 @@ mod tests {
         assert_eq!(s.display(), "あい");
     }
 
-    #[test]
-    fn ai_context_is_transient_bounded_and_can_be_disabled() {
-        let mut s = session();
-        s.event(Key::Text("食事に")).unwrap();
-        s.event(Key::Enter).unwrap();
-        s.event(Key::Text("hashi")).unwrap();
-        assert!(s.event(Key::Space).unwrap().committed.is_none());
-        assert_eq!(s.display(), "箸");
-        s.event(Key::ToggleAi).unwrap();
-        assert!(!s.ai_enabled());
-        assert!(s.context.is_empty());
-        s.event(Key::Space).unwrap();
-        assert_eq!(s.display(), "橋");
-        s.event(Key::Cancel).unwrap();
-        s.event(Key::ToggleAi).unwrap();
-        s.remember(&"🙂".repeat(200));
-        assert_eq!(s.context.chars().count(), 96);
-        s.event(Key::ClearContext).unwrap();
-        assert!(s.context.is_empty());
-    }
     #[test]
     fn predictions_require_explicit_selection() {
         let mut s = session();

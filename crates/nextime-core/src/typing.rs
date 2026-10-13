@@ -35,7 +35,7 @@ impl Engine {
                 break;
             }
             let mut entries = Vec::new();
-            let spellings = nextime_ai::typo_readings(&input[..end]);
+            let spellings = crate::spelling::typo_readings(&input[..end]);
             for chunk in spellings.chunks(128) {
                 let queries: Vec<_> = chunk.iter().map(String::as_str).collect();
                 for matches in self

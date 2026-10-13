@@ -41,18 +41,7 @@ public:
         if(!count) { hide(); return S_OK; }
         rows_.clear();
         uint32_t start=selected==UINT32_MAX ? 0 : (selected/8)*8;
-        rows_.push_back(session.text(NEXTIME_MODE)+L" / "+session.text(NEXTIME_AI_MODE)+L" F9 / F6:全角 Shift+F6:半角 / F10:英字 / F12:日英");
-        rows_.push_back(session.text(NEXTIME_TRAINING_MODE)+L" F7:文章学習の切替（端末内）");
-        auto local=session.text(NEXTIME_LOCAL_AI_MODE);
-        rows_.push_back(local==L"local:pending" ? L"文章理解AI:端末内 / 処理中" :
-            local==L"local:original" ? L"独自AI:端末内 / 文脈・入力補正" :
-            local==L"local:on" ? L"文章理解AI:端末内 / 有効" :
-            local==L"local:config-missing" ? L"文章理解AI:設定ファイルが見つかりません" :
-            local==L"local:directory-missing" ? L"文章理解AI:保存先を取得できません" :
-            local==L"local:config-unreadable" ? L"文章理解AI:設定を読み取れません" :
-            local==L"local:config-invalid" ? L"文章理解AI:設定ファイルの形式エラー" :
-            local==L"local:config-disabled" ? L"文章理解AI:設定で無効になっています" :
-            local==L"local:token-invalid" ? L"文章理解AI:認証設定の形式エラー" : L"文章理解AI:無効（F9）");
+        rows_.push_back(session.text(NEXTIME_MODE)+L" / F6:全角 Shift+F6:半角 / F10:英字 / F12:日英");
         for(uint32_t i=start;i<std::min(count,start+8);++i) rows_.push_back(std::to_wstring(i+1)+L". "+session.text(NEXTIME_CANDIDATE,i));
         selected_=selected==UINT32_MAX ? UINT32_MAX : selected-start+3;
         if(!window_) {

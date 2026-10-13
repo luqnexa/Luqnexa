@@ -19,16 +19,13 @@ jobs:
           targets: aarch64-apple-ios
       - name: Install project generator
         run: brew install xcodegen
-      - name: Build Rust model and iPhone static library
+      - name: Build iPhone static library
         shell: bash
         run: |
           set -euo pipefail
           export CARGO_TARGET_DIR="$RUNNER_TEMP/luqnexa-ios-cargo"
           mkdir -p platforms/ios/build platforms/ios/Resources
-          cargo run --release -p luqnexa-ml --features trainer --bin luqnexa-train -- --data modules/Luqnexa-AI/models/rust-training/reset-v1.jsonl --output "$RUNNER_TEMP/ios-training" --epochs 200 --seed 1337
-          cp "$RUNNER_TEMP/ios-training/model.lqml" platforms/ios/Resources/model.lqml
-          cp "$RUNNER_TEMP/ios-training/report.json" platforms/ios/Resources/training-report.json
-          cargo build --release -p nextime-ffi --features mobile-neural --target aarch64-apple-ios --locked
+          cargo build --release -p nextime-ffi --target aarch64-apple-ios --locked
           cp "$CARGO_TARGET_DIR/aarch64-apple-ios/release/libnextime_ffi.a" platforms/ios/build/
       - name: Build unsigned iPhone app
         working-directory: platforms/ios
@@ -36,20 +33,15 @@ jobs:
           set -euo pipefail
           xcodegen generate
           xcodebuild -project LuqnexaProbe.xcodeproj -scheme LuqnexaProbe -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
-          test -f build/DerivedData/Build/Products/Release-iphoneos/LuqnexaProbe.app/model.lqml
           mkdir -p build/Payload
           cp -R build/DerivedData/Build/Products/Release-iphoneos/LuqnexaProbe.app build/Payload/
           cd build
           zip -qr LuqnexaProbe-unsigned.ipa Payload
           shasum -a 256 LuqnexaProbe-unsigned.ipa > SHA256SUMS.txt
-      - name: Verify IPA architecture and model integrity
-        run: python3 scripts/verify-ios-probe.py platforms/ios/build/LuqnexaProbe-unsigned.ipa --require-keyboard > platforms/ios/build/verification.json
       - uses: actions/upload-artifact@v4
         with:
           name: LuqnexaProbe-unsigned-iphone
           path: |
             platforms/ios/build/LuqnexaProbe-unsigned.ipa
             platforms/ios/build/SHA256SUMS.txt
-            platforms/ios/build/verification.json
-            platforms/ios/Resources/training-report.json
           if-no-files-found: error

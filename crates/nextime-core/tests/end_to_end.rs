@@ -2,45 +2,11 @@
 use nextime_core::{ConvertError, Dictionary, Engine};
 
 #[test]
-fn love_and_ai_remain_available_with_contextual_choices() {
+fn removed_ai_does_not_read_context() {
     let engine = Engine::bundled();
-    let result = engine.convert("あいをつかめ", 24).unwrap();
-    assert_eq!(result.candidates[0].surface, "愛を掴め");
-    assert!(result.candidates.iter().any(|c| c.surface == "AIを掴め"));
-    for (context, expected) in [
-        ("恋人への愛情について話しています。", "愛を確かめたい"),
-        ("人工知能の動作について話しています。", "AIを確かめたい"),
-    ] {
-        let result = engine
-            .convert_with_context("あいをたしかめたい", context, 24)
-            .unwrap();
-        assert_eq!(result.candidates[0].surface, expected, "{context}");
-        assert!(
-            result
-                .candidates
-                .iter()
-                .any(|c| c.surface == "愛を確かめたい")
-        );
-        assert!(
-            result
-                .candidates
-                .iter()
-                .any(|c| c.surface == "AIを確かめたい")
-        );
-    }
-    let result = engine.convert("あいをたしかめたい", 24).unwrap();
-    assert!(
-        result
-            .candidates
-            .iter()
-            .any(|c| c.surface == "愛を確かめたい")
-    );
-    assert!(
-        result
-            .candidates
-            .iter()
-            .any(|c| c.surface == "AIを確かめたい")
-    );
+    let a = engine.convert_with_context("hashi", "食事", 8).unwrap();
+    let b = engine.convert_with_context("hashi", "川", 8).unwrap();
+    assert_eq!(a, b);
 }
 
 #[test]
@@ -82,238 +48,6 @@ fn desire_phrases_keep_their_conjugation_and_only_commit_explicitly() {
                 Some(expected)
             );
         }
-    }
-}
-
-#[test]
-fn local_ai_configuration_refreshes_after_session_creation() {
-    use nextime_core::{Key, Session};
-    const CHILD: &str = "LUQNEXA_CONFIG_REFRESH_TEST";
-    if std::env::var_os(CHILD).is_some() {
-        let directory =
-            std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join("Luqnexa");
-        let engine = Engine::bundled();
-        assert_eq!(
-            engine.convert("あいをたしかめたい", 8).unwrap().candidates[0].surface,
-            "AIを確かめたい"
-        );
-        let mut session = Session::new(engine, 8).unwrap();
-        assert!(!session.local_ai_enabled());
-        assert_eq!(session.local_ai_status(), "local:config-missing");
-        std::fs::create_dir(&directory).unwrap();
-        let config = directory.join("local-ai.json");
-        let enabled = format!(r#"{{"enabled":true,"token":"{}"}}"#, "0".repeat(64));
-        std::fs::write(&config, &enabled).unwrap();
-        session.event(Key::Text("あいをたしかめたい")).unwrap();
-        assert!(
-            session.local_ai_enabled(),
-            "refresh before conversion UI is shown"
-        );
-        session.event(Key::Space).unwrap();
-        assert!(session.local_ai_enabled());
-        assert_eq!(session.local_ai_status(), "local:on");
-        assert!(
-            session
-                .candidates()
-                .iter()
-                .any(|c| c.surface == "AIを確かめたい")
-        );
-        assert!(
-            session
-                .candidates()
-                .iter()
-                .any(|c| c.surface == "愛を確かめたい")
-        );
-        session.event(Key::Cancel).unwrap();
-        std::fs::write(&config, r#"{"enabled":false}"#).unwrap();
-        session.event(Key::Text("あいをたしかめたい")).unwrap();
-        session.event(Key::Space).unwrap();
-        assert!(!session.local_ai_enabled());
-        assert_eq!(session.local_ai_status(), "local:config-disabled");
-        session.event(Key::Cancel).unwrap();
-        std::fs::write(&config, "broken JSON").unwrap();
-        session.event(Key::Text("a")).unwrap();
-        assert_eq!(session.local_ai_status(), "local:config-invalid");
-        session.event(Key::Cancel).unwrap();
-        std::fs::write(&config, r#"{"enabled":true,"token":"short"}"#).unwrap();
-        session.event(Key::Text("a")).unwrap();
-        assert_eq!(session.local_ai_status(), "local:token-invalid");
-        session.event(Key::Cancel).unwrap();
-        std::fs::write(&config, &enabled).unwrap();
-        session.event(Key::ToggleAi).unwrap();
-        session.event(Key::Text("あいをたしかめたい")).unwrap();
-        session.event(Key::Space).unwrap();
-        assert!(
-            !session.local_ai_enabled(),
-            "user's F9 choice must remain disabled"
-        );
-        assert_eq!(session.local_ai_status(), "local:off");
-        std::fs::remove_file(config).unwrap();
-        std::fs::remove_dir(directory).unwrap();
-        return;
-    }
-    // Separate process: never mutate this process's real user configuration.
-    let directory = std::env::temp_dir().join(format!(
-        "luqnexa-config-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir(&directory).unwrap();
-    let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "local_ai_configuration_refreshes_after_session_creation",
-        ])
-        .env(CHILD, "1")
-        .env("LUQNEXA_AI_BACKEND", "qwen")
-        .env("LOCALAPPDATA", &directory)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    std::fs::remove_dir(directory).unwrap();
-}
-
-#[test]
-#[ignore = "Requires a running, explicitly configured local Qwen backend"]
-fn real_local_llm_changes_contextual_choice_without_commit_or_stale_selection() {
-    use nextime_core::{Key, Session};
-    assert!(nextime_ai::LocalLlm::configured().is_some());
-    let dictionary =
-        Dictionary::from_tsv("はし\t橋\tnoun\t10000\nはし\t箸\tnoun\t9000\nはし\t端\tnoun\t8000\n")
-            .unwrap();
-    let mut session = Session::new(Engine::new(dictionary), 8).unwrap();
-    session
-        .event(Key::Text("テーブルの一番外側です。"))
-        .unwrap();
-    session.event(Key::Enter).unwrap();
-    session.event(Key::Text("hashi")).unwrap();
-    session.event(Key::Space).unwrap();
-    assert_eq!(
-        session.display(),
-        "橋",
-        "Lightweight baseline should differ from the LLM choice"
-    );
-    let started = std::time::Instant::now();
-    while session.display() != "端" && started.elapsed().as_secs() < 20 {
-        assert!(session.event(Key::PollAi).unwrap().committed.is_none());
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    assert_eq!(session.display(), "端");
-    session.event(Key::Cancel).unwrap();
-    session.event(Key::Text("hashi")).unwrap();
-    session.event(Key::Space).unwrap();
-    session.event(Key::PollAi).unwrap();
-    session.event(Key::Next).unwrap();
-    let explicit = session.display().to_owned();
-    for _ in 0..20 {
-        let outcome = session.event(Key::PollAi).unwrap();
-        assert!(!outcome.handled && outcome.committed.is_none());
-        assert_eq!(session.display(), explicit);
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    session.clear_context();
-    assert!(!session.event(Key::PollAi).unwrap().handled);
-}
-
-#[test]
-#[ignore = "Requires a running, explicitly configured local Qwen backend"]
-fn real_local_llm_preserves_english_name_while_ranking_japanese() {
-    use nextime_core::{Key, Session};
-    assert!(nextime_ai::LocalLlm::configured().is_some());
-    let dictionary = Dictionary::from_tsv(
-        "ChatGPTでかく\tChatGPTで書く\tphrase\t10000\nChatGPTでかく\tChatGPTで描く\tphrase\t9000\n",
-    )
-    .unwrap();
-    let mut session = Session::new(Engine::new(dictionary), 8).unwrap();
-    session
-        .event(Key::Text("文章ではなく、猫の絵を作る話です。"))
-        .unwrap();
-    session.event(Key::Enter).unwrap();
-    for ch in "ChatGPTでかく".chars() {
-        assert!(
-            session
-                .event(Key::Text(&ch.to_string()))
-                .unwrap()
-                .committed
-                .is_none()
-        );
-    }
-    session.event(Key::Space).unwrap();
-    let started = std::time::Instant::now();
-    while session.local_ai_pending() && started.elapsed().as_secs() < 30 {
-        assert!(session.event(Key::PollAi).unwrap().committed.is_none());
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    assert_eq!(session.display(), "ChatGPTで描く");
-    assert_eq!(
-        session.event(Key::Enter).unwrap().committed.as_deref(),
-        Some("ChatGPTで描く")
-    );
-}
-
-#[test]
-#[ignore = "Requires a running, explicitly configured local Qwen backend"]
-fn real_local_llm_selects_casing_without_automatic_commit() {
-    use nextime_core::{Key, Session};
-    assert!(nextime_ai::LocalLlm::configured().is_some());
-    for (context, reading, expected) in [
-        (
-            "人工知能のチャットサービスを使います。",
-            "chatgpt",
-            "ChatGPT",
-        ),
-        ("コードを書くエディターの話です。", "vscode", "VSCode"),
-        ("ソースコードを共有するサービスです。", "github", "GitHub"),
-        (
-            "メモリ安全性を重視するプログラミング言語です。",
-            "rust",
-            "Rust",
-        ),
-        (
-            "The exact variable name is chatgpt. Preserve its lowercase spelling.",
-            "chatgpt",
-            "chatgpt",
-        ),
-    ] {
-        let mut session = Session::new(Engine::bundled(), 8).unwrap();
-        if context.is_ascii() {
-            session.event(Key::ToggleMode).unwrap();
-        }
-        session.event(Key::Text(context)).unwrap();
-        session.event(Key::Enter).unwrap();
-        if context.is_ascii() {
-            session.event(Key::ToggleMode).unwrap();
-        }
-        for ch in reading.chars() {
-            assert!(
-                session
-                    .event(Key::Text(&ch.to_string()))
-                    .unwrap()
-                    .committed
-                    .is_none()
-            );
-        }
-        assert_eq!(session.display(), reading);
-        assert!(session.event(Key::Space).unwrap().committed.is_none());
-        assert!(session.candidates().iter().any(|c| c.surface == reading));
-        let started = std::time::Instant::now();
-        while session.local_ai_pending() && started.elapsed().as_secs() < 30 {
-            assert!(session.event(Key::PollAi).unwrap().committed.is_none());
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
-        assert_eq!(session.display(), expected, "{context}");
-        assert_eq!(
-            session.event(Key::Enter).unwrap().committed.as_deref(),
-            Some(expected)
-        );
     }
 }
 
@@ -688,4 +422,25 @@ fn unicode_and_ambiguous_input_obey_candidate_invariants() {
         engine.convert(&"🙂".repeat(129), 1),
         Err(ConvertError::InputTooLong)
     );
+}
+
+#[test]
+fn obsolete_ai_keys_cannot_enable_learning() {
+    use nextime_core::{Key, Session};
+    let mut session = Session::new(Engine::bundled(), 8).unwrap();
+    for key in [
+        Key::ToggleAi,
+        Key::ToggleTraining,
+        Key::ClearLearning,
+        Key::PollAi,
+    ] {
+        assert!(!session.event(key).unwrap().handled);
+    }
+    assert!(!session.ai_enabled());
+    assert!(!session.text_learning_enabled());
+    assert_eq!(session.local_ai_status(), "local:removed");
+    session.event(Key::Text("nihongo")).unwrap();
+    session.event(Key::Enter).unwrap();
+    assert_eq!(session.learned_entries(), 0);
+    assert_eq!(session.learned_text_features(), 0);
 }

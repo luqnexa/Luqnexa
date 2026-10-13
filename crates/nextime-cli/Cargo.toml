@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 nextime-core.workspace = true
-nextime-ai.workspace = true
 nexc-lite.workspace = true
 nexc-max.workspace = true
 
