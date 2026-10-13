@@ -28,7 +28,7 @@ def verify(path, require_keyboard=False):
         model = archive.read(base + 'model.lqml')
         report = json.loads(archive.read(base + 'training-report.json'))
         digest = hashlib.sha256(model).hexdigest()
-        if len(model) != 165692 or not model.startswith(b'LQML0001'):
+        if len(model) != 165692 or model[:8] not in (b'LQML0001', b'LQML0002'):
             raise ValueError('invalid Rust model')
         if digest != report['model_sha256']:
             raise ValueError('embedded model SHA-256 mismatch')
